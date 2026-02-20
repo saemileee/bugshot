@@ -237,6 +237,30 @@
   @apply px-3 py-1.5 text-xs text-gray-400 bg-gray-50 border-t border-gray-100;
 }
 
+/* ── As-Is / To-Be screenshots ── */
+.qa-change-ss {
+  @apply flex gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100;
+}
+
+.qa-change-ss-col {
+  @apply flex-1 min-w-0;
+}
+
+.qa-change-ss-label {
+  @apply block text-xs font-semibold text-gray-500 mb-1;
+}
+
+.qa-change-ss-img {
+  @apply w-full rounded border border-gray-200;
+  display: block;
+}
+
+/* ── Change description (non-CSS note) ── */
+.qa-change-desc {
+  @apply px-3 py-2 text-xs text-gray-700 bg-amber-50 border-b border-amber-100 leading-relaxed;
+  white-space: pre-wrap;
+}
+
 /* ── Change sections ── */
 .qa-change-section {
   @apply px-3 py-2;

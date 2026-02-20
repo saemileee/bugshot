@@ -43,13 +43,26 @@ export function SubmitPanel({
     setIsSubmitting(true);
     setResult(null);
 
+    // Collect all screenshots: manual + per-change as-is/to-be
+    const allScreenshots: Array<{ dataUrl: string; filename: string }> = screenshots.map((ss) => ({
+      dataUrl: ss.annotated || ss.original,
+      filename: ss.filename,
+    }));
+
+    for (const c of changes) {
+      const safeSel = c.selector.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+      if (c.screenshotBefore) {
+        allScreenshots.push({ dataUrl: c.screenshotBefore, filename: `${safeSel}-as-is.png` });
+      }
+      if (c.screenshotAfter) {
+        allScreenshots.push({ dataUrl: c.screenshotAfter, filename: `${safeSel}-to-be.png` });
+      }
+    }
+
     const payload: JiraSubmissionPayload = {
       changes,
       manualNotes: description,
-      screenshots: screenshots.map((ss) => ({
-        dataUrl: ss.annotated || ss.original,
-        filename: ss.filename,
-      })),
+      screenshots: allScreenshots,
       pageUrl: window.location.href,
       pageTitle: document.title,
     };
@@ -106,6 +119,29 @@ export function SubmitPanel({
               return (
                 <div key={change.id} style={{ marginBottom: 12 }}>
                   <code className="qa-preview-selector">{change.selector}</code>
+
+                  {(change.screenshotBefore || change.screenshotAfter) && (
+                    <div className="qa-change-ss" style={{ margin: '6px 0', padding: '6px', background: '#f9fafb', borderRadius: 6 }}>
+                      {change.screenshotBefore && (
+                        <div className="qa-change-ss-col">
+                          <span className="qa-change-ss-label">As-Is</span>
+                          <img className="qa-change-ss-img" src={change.screenshotBefore} alt="Before" />
+                        </div>
+                      )}
+                      {change.screenshotAfter && (
+                        <div className="qa-change-ss-col">
+                          <span className="qa-change-ss-label">To-Be</span>
+                          <img className="qa-change-ss-img" src={change.screenshotAfter} alt="After" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {change.description && (
+                    <div className="qa-change-desc" style={{ borderRadius: 4, marginBottom: 6 }}>
+                      {change.description}
+                    </div>
+                  )}
 
                   {meta.length > 0 && meta.map((m, i) => (
                     <div key={i} className="qa-preview-meta">

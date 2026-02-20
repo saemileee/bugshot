@@ -17,6 +17,8 @@ export interface CSSChange {
   elementDescription: string;
   url: string;
   properties: CSSPropertyChange[];
+  /** Free-text description for changes that can't be expressed via CSS edits */
+  description?: string;
   screenshotBefore?: string;
   screenshotAfter?: string;
   status: 'pending' | 'batched' | 'submitted';

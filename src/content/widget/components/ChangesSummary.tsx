@@ -121,6 +121,31 @@ export function ChangesSummary({
                   </button>
                 </div>
 
+                {/* As-Is / To-Be screenshots */}
+                {(change.screenshotBefore || change.screenshotAfter) && (
+                  <div className="qa-change-ss">
+                    {change.screenshotBefore && (
+                      <div className="qa-change-ss-col">
+                        <span className="qa-change-ss-label">As-Is</span>
+                        <img className="qa-change-ss-img" src={change.screenshotBefore} alt="Before" />
+                      </div>
+                    )}
+                    {change.screenshotAfter && (
+                      <div className="qa-change-ss-col">
+                        <span className="qa-change-ss-label">To-Be</span>
+                        <img className="qa-change-ss-img" src={change.screenshotAfter} alt="After" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Description note */}
+                {change.description && (
+                  <div className="qa-change-desc">
+                    {change.description}
+                  </div>
+                )}
+
                 {meta.map((m, i) => (
                   <div key={i} className="qa-change-meta-row">
                     <span className="qa-change-meta-label">{m.property}</span>
