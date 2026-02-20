@@ -4,10 +4,9 @@ import type { EpicConfig } from '@/shared/types/jira-ticket';
 
 export function EpicSettings() {
   const [config, setConfig] = useState<EpicConfig>({
-    epicKey: '',
+    parentKey: '',
     projectKey: '',
     issueType: 'Task',
-    defaultLabels: ['design-qa'],
   });
   const [saved, setSaved] = useState(false);
 
@@ -41,12 +40,12 @@ export function EpicSettings() {
       </div>
 
       <div className="form-group">
-        <label>Epic Key (optional, for linking)</label>
+        <label>Parent Issue Key (optional)</label>
         <input
           type="text"
           placeholder="e.g., PROJ-42"
-          value={config.epicKey}
-          onChange={(e) => setConfig({ ...config, epicKey: e.target.value })}
+          value={config.parentKey}
+          onChange={(e) => setConfig({ ...config, parentKey: e.target.value })}
         />
       </div>
 

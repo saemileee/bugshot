@@ -25,8 +25,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'get-recording':
-      getRecordingFromDB(message.recordingId).then((blob) => {
-        sendResponse({ blob });
+      getRecordingFromDB(message.recordingId).then(async (blob) => {
+        if (!blob) {
+          sendResponse({ dataUrl: null });
+          return;
+        }
+        // Convert Blob to base64 data URL for serialization
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+        sendResponse({ dataUrl });
       });
       return true; // async
   }

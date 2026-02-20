@@ -4,10 +4,9 @@ import type { EpicConfig as EpicConfigType } from '@/shared/types/jira-ticket';
 
 export function EpicConfig() {
   const [config, setConfig] = useState<EpicConfigType>({
-    epicKey: '',
+    parentKey: '',
     projectKey: '',
     issueType: 'Task',
-    defaultLabels: ['design-qa'],
   });
   const [saved, setSaved] = useState(false);
 
@@ -41,12 +40,12 @@ export function EpicConfig() {
       </div>
 
       <div className="form-group">
-        <label>Epic Key (Parent)</label>
+        <label>Parent Issue Key</label>
         <input
           type="text"
           placeholder="e.g., PROJ-42"
-          value={config.epicKey}
-          onChange={(e) => setConfig({ ...config, epicKey: e.target.value })}
+          value={config.parentKey}
+          onChange={(e) => setConfig({ ...config, parentKey: e.target.value })}
         />
       </div>
 
@@ -61,21 +60,6 @@ export function EpicConfig() {
           <option value="Story">Story</option>
           <option value="Sub-task">Sub-task</option>
         </select>
-      </div>
-
-      <div className="form-group">
-        <label>Default Labels (comma-separated)</label>
-        <input
-          type="text"
-          placeholder="design-qa, css-fix"
-          value={config.defaultLabels.join(', ')}
-          onChange={(e) =>
-            setConfig({
-              ...config,
-              defaultLabels: e.target.value.split(',').map((l) => l.trim()).filter(Boolean),
-            })
-          }
-        />
       </div>
 
       <button className="btn btn-primary" onClick={handleSave}>

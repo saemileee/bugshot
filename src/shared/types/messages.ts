@@ -30,20 +30,24 @@ export type ExtensionMessage =
   // Element inspection (Content Script -> DevTools Panel via Service Worker)
   | { type: 'INSPECT_ELEMENT'; selector: string }
 
-  // Auth
-  | { type: 'INITIATE_AUTH' }
-  | { type: 'AUTH_RESULT'; success: boolean; cloudName?: string }
+  // Auth (API Token)
+  | { type: 'SAVE_JIRA_CREDENTIALS'; email: string; apiToken: string; siteUrl: string }
+  | { type: 'JIRA_CREDENTIALS_RESULT'; success: boolean; displayName?: string; error?: string }
   | { type: 'CHECK_AUTH_STATUS' }
-  | { type: 'AUTH_STATUS'; authenticated: boolean; cloudName?: string }
-  | { type: 'AUTH_STATUS_CHANGED'; isAuthenticated: boolean }
+  | { type: 'AUTH_STATUS'; authenticated: boolean; siteUrl?: string }
+  | { type: 'DISCONNECT_JIRA' }
+  | { type: 'DISCONNECT_RESULT'; success: boolean }
 
-  // Epic Config
-  | { type: 'SET_EPIC_CONFIG'; epicKey: string; projectKey: string }
-  | { type: 'GET_EPIC_CONFIG' }
-  | { type: 'EPIC_CONFIG'; epicKey: string; projectKey: string };
+  // Jira data fetch
+  | { type: 'FETCH_JIRA_PROJECTS' }
+  | { type: 'FETCH_JIRA_ISSUE_TYPES'; projectKey: string }
+  | { type: 'FETCH_JIRA_STATUSES'; projectKey: string }
+  | { type: 'FETCH_JIRA_EPICS'; projectKey: string }
+  | { type: 'SEARCH_JIRA_ISSUES'; projectKey: string; query: string };
 
 export interface JiraSubmissionPayload {
   changes: CSSChange[];
+  summary?: string;
   manualNotes?: string;
   screenshots: Array<{ dataUrl: string; filename: string }>;
   videoRecordingId?: string;

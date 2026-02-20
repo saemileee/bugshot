@@ -20,7 +20,6 @@ export async function startRecording(tabId: number): Promise<void> {
   await ensureOffscreenDocument();
 
   // Tell offscreen document to start recording via getDisplayMedia
-  // Chrome will show a tab/screen picker dialog to the user
   const result: { success: boolean; error?: string } = await chrome.runtime.sendMessage({
     type: 'start-recording',
     target: 'offscreen',
@@ -61,24 +60,46 @@ export function getRecordingState(): { isRecording: boolean; tabId: number | nul
   return { isRecording, tabId: recordingTabId };
 }
 
-async function ensureOffscreenDocument(): Promise<void> {
-  // Check if offscreen document already exists
+/**
+ * Ensure offscreen document exists. Returns true if newly created.
+ */
+async function ensureOffscreenDocument(): Promise<boolean> {
   const existingContexts = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
   });
 
-  if (existingContexts.length > 0) return;
+  if (existingContexts.length > 0) return false;
 
   await chrome.offscreen.createDocument({
     url: 'src/offscreen/offscreen.html',
     reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA],
     justification: 'Screen recording via getDisplayMedia for Design QA',
   });
+
+  return true;
 }
 
-// Retrieve a recording blob from the offscreen document's IndexedDB
+/**
+ * Retrieve a recording as a Blob from the offscreen document's IndexedDB.
+ * Uses base64 string for serialization since Blob can't pass through sendMessage.
+ */
 export async function getRecordingBlob(recordingId: string): Promise<Blob | null> {
+  const wasCreated = await ensureOffscreenDocument();
+
+  // If we just created the offscreen document, wait for its script to load
+  // and register the message listener. Without this, the message arrives
+  // before the listener is ready and gets silently dropped.
+  if (wasCreated) {
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
   return new Promise((resolve) => {
+    // Timeout: if offscreen doesn't respond within 15s, give up
+    const timeout = setTimeout(() => {
+      console.warn('getRecordingBlob timed out for', recordingId);
+      resolve(null);
+    }, 15_000);
+
     chrome.runtime.sendMessage(
       {
         type: 'get-recording',
@@ -86,9 +107,27 @@ export async function getRecordingBlob(recordingId: string): Promise<Blob | null
         recordingId,
       },
       (response) => {
-        if (response?.blob) {
-          resolve(response.blob as Blob);
+        clearTimeout(timeout);
+
+        if (chrome.runtime.lastError) {
+          console.warn('getRecordingBlob error:', chrome.runtime.lastError.message);
+          resolve(null);
+          return;
+        }
+        if (response?.dataUrl) {
+          try {
+            const [header, b64] = (response.dataUrl as string).split(',');
+            const mime = header.match(/:(.*?);/)?.[1] || 'video/webm';
+            const bytes = atob(b64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            resolve(new Blob([arr], { type: mime }));
+          } catch (err) {
+            console.warn('getRecordingBlob base64 decode failed:', err);
+            resolve(null);
+          }
         } else {
+          console.warn('getRecordingBlob: no dataUrl in response for', recordingId);
           resolve(null);
         }
       },

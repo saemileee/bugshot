@@ -1,18 +1,8 @@
-// Atlassian OAuth
-export const JIRA_AUTH_URL = 'https://auth.atlassian.com/authorize';
-export const JIRA_TOKEN_URL = 'https://auth.atlassian.com/oauth/token';
-export const JIRA_ACCESSIBLE_RESOURCES_URL = 'https://api.atlassian.com/oauth/token/accessible-resources';
-export const JIRA_API_BASE = 'https://api.atlassian.com/ex/jira';
-
-// Client ID from environment (build-time injection)
-export const JIRA_CLIENT_ID = import.meta.env.VITE_JIRA_CLIENT_ID as string;
-
 // Storage keys
 export const STORAGE_KEYS = {
-  JIRA_TOKENS: 'jiraTokens',
-  JIRA_CLOUD_ID: 'jiraCloudId',
-  JIRA_CLOUD_NAME: 'jiraCloudName',
-  JIRA_CLOUD_URL: 'jiraCloudUrl',
+  // API Token auth
+  JIRA_CREDENTIALS: 'jiraCredentials', // { email, apiToken, siteUrl }
+  // Project config
   EPIC_CONFIG: 'epicConfig',
   TRACKED_PROPERTIES: 'trackedProperties',
   RECENT_SUBMISSIONS: 'recentSubmissions',
@@ -34,5 +24,4 @@ export const DEFAULT_TRACKED_PROPERTIES = [
 
 // Jira defaults
 export const DEFAULT_ISSUE_TYPE = 'Task';
-export const DEFAULT_LABELS = ['design-qa'];
 export const TICKET_PREFIX = '[Design QA]';

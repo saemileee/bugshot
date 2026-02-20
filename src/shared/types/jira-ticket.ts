@@ -1,8 +1,9 @@
 export interface EpicConfig {
-  epicKey: string;
   projectKey: string;
+  projectName?: string;
   issueType: string;
-  defaultLabels: string[];
+  parentKey?: string;       // epic key or parent issue key (for sub-tasks)
+  parentSummary?: string;
 }
 
 export interface JiraIssuePayload {
@@ -10,8 +11,7 @@ export interface JiraIssuePayload {
   issueType: string;
   summary: string;
   description: object; // ADF format
-  labels: string[];
-  epicKey?: string;
+  parentKey?: string;
 }
 
 export interface JiraAttachment {
@@ -20,6 +20,8 @@ export interface JiraAttachment {
   mimeType: string;
   size: number;
   content: string;
+  /** Media API file UUID — required for ADF mediaSingle inline images */
+  mediaApiFileId?: string;
 }
 
 export interface JiraIssueResponse {

@@ -1,9 +1,18 @@
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
-import { initiateJiraAuth, isAuthenticated } from '../jira/auth';
-import { createIssue, addAttachment } from '../jira/api';
+import { saveAndVerify, isAuthenticated, logout, getCredentials } from '../jira/auth';
+import {
+  createIssue,
+  addAttachment,
+  updateIssueDescriptionWiki,
+  fetchProjects,
+  fetchIssueTypes,
+  fetchStatuses,
+  fetchEpics,
+  searchIssues,
+} from '../jira/api';
 import { startRecording, stopRecording, getRecordingBlob } from '../recording/manager';
 import { STORAGE_KEYS } from '@/shared/constants';
-import { formatSingleChange, formatBatchedChanges, generateSummary } from '@/shared/utils/jira-formatter';
+import { generateSummary, buildFullDescription, buildWikiMarkupDescription } from '@/shared/utils/jira-formatter';
 import { dataUrlToBlob } from '@/shared/utils/screenshot-utils';
 import type { EpicConfig } from '@/shared/types/jira-ticket';
 import type { ChangeSet } from '@/shared/types/css-change';
@@ -163,37 +172,80 @@ function handleOneShotMessage(
   sendResponse: (response: unknown) => void,
 ) {
   switch (message.type) {
-    case 'INITIATE_AUTH': {
-      initiateJiraAuth().then((success) => {
-        if (success) {
-          chrome.storage.sync.get(STORAGE_KEYS.JIRA_CLOUD_NAME, (result) => {
-            sendResponse({
-              type: 'AUTH_RESULT',
-              success: true,
-              cloudName: result[STORAGE_KEYS.JIRA_CLOUD_NAME],
-            });
+    case 'SAVE_JIRA_CREDENTIALS': {
+      saveAndVerify(message.email, message.apiToken, message.siteUrl).then((result) => {
+        if (result.success) {
+          sendResponse({
+            type: 'JIRA_CREDENTIALS_RESULT',
+            success: true,
+            displayName: result.displayName,
           });
         } else {
-          sendResponse({ type: 'AUTH_RESULT', success: false });
+          sendResponse({
+            type: 'JIRA_CREDENTIALS_RESULT',
+            success: false,
+            error: result.error,
+          });
         }
       });
       break;
     }
 
     case 'CHECK_AUTH_STATUS': {
-      isAuthenticated().then((authenticated) => {
+      isAuthenticated().then(async (authenticated) => {
         if (authenticated) {
-          chrome.storage.sync.get(STORAGE_KEYS.JIRA_CLOUD_NAME, (result) => {
-            sendResponse({
-              type: 'AUTH_STATUS',
-              authenticated: true,
-              cloudName: result[STORAGE_KEYS.JIRA_CLOUD_NAME],
-            });
+          const creds = await getCredentials();
+          sendResponse({
+            type: 'AUTH_STATUS',
+            authenticated: true,
+            siteUrl: creds.siteUrl,
           });
         } else {
           sendResponse({ type: 'AUTH_STATUS', authenticated: false });
         }
       });
+      break;
+    }
+
+    case 'DISCONNECT_JIRA': {
+      logout().then(() => {
+        sendResponse({ type: 'DISCONNECT_RESULT', success: true });
+      });
+      break;
+    }
+
+    case 'FETCH_JIRA_PROJECTS': {
+      fetchProjects()
+        .then((projects) => sendResponse({ success: true, data: projects }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'FETCH_JIRA_ISSUE_TYPES': {
+      fetchIssueTypes(message.projectKey)
+        .then((types) => sendResponse({ success: true, data: types }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'FETCH_JIRA_STATUSES': {
+      fetchStatuses(message.projectKey)
+        .then((statuses) => sendResponse({ success: true, data: statuses }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'FETCH_JIRA_EPICS': {
+      fetchEpics(message.projectKey)
+        .then((epics) => sendResponse({ success: true, data: epics }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'SEARCH_JIRA_ISSUES': {
+      searchIssues(message.projectKey, message.query)
+        .then((issues) => sendResponse({ success: true, data: issues }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
       break;
     }
 
@@ -257,37 +309,78 @@ async function handleJiraSubmission(
     createdAt: Date.now(),
   };
 
-  const description =
-    payload.changes.length <= 1 && payload.changes[0]
-      ? formatSingleChange(payload.changes[0])
-      : formatBatchedChanges(changeSet);
+  // ── Diagnostic logging ──
+  console.log('[Jira] Submission start:', {
+    changes: payload.changes.length,
+    screenshots: payload.screenshots.length,
+    screenshotFiles: payload.screenshots.map((s) => s.filename),
+    videoRecordingId: payload.videoRecordingId ?? '(none)',
+    manualNotes: payload.manualNotes ? `${payload.manualNotes.length} chars` : '(none)',
+  });
 
-  const summary = generateSummary(changeSet);
+  // Collect all filenames that will be attached (known before upload)
+  const allFilenames = payload.screenshots.map((s) => s.filename);
+  let videoFilename: string | undefined;
+  if (payload.videoRecordingId) {
+    videoFilename = `recording-${Date.now()}.webm`;
+    allFilenames.push(videoFilename);
+  }
+
+  // Phase 1: Create issue with comprehensive ADF description (fallback if Phase 3 fails)
+  const summary = payload.summary || generateSummary(changeSet);
+  const description = buildFullDescription(changeSet, allFilenames);
 
   const issue = await createIssue({
     projectKey: epicConfig.projectKey,
     issueType: epicConfig.issueType || 'Task',
     summary,
     description,
-    labels: epicConfig.defaultLabels || ['design-qa'],
-    epicKey: epicConfig.epicKey || undefined,
+    parentKey: epicConfig.parentKey || undefined,
   });
+  console.log('[Jira] Issue created:', issue.key);
 
-  // Upload screenshots as attachments
+  // Phase 2: Upload all attachments
+  let uploadedCount = 0;
   for (const screenshot of payload.screenshots) {
-    const blob = dataUrlToBlob(screenshot.dataUrl);
-    await addAttachment(issue.key, blob, screenshot.filename);
+    try {
+      const blob = dataUrlToBlob(screenshot.dataUrl);
+      await addAttachment(issue.key, blob, screenshot.filename);
+      uploadedCount++;
+      console.log('[Jira] Attached:', screenshot.filename);
+    } catch (err) {
+      console.warn('[Jira] Failed to attach', screenshot.filename, err);
+    }
   }
 
-  // Upload video recording if present
-  if (payload.videoRecordingId) {
+  if (payload.videoRecordingId && videoFilename) {
+    console.log('[Jira] Fetching video blob for:', payload.videoRecordingId);
     try {
       const videoBlob = await getRecordingBlob(payload.videoRecordingId);
       if (videoBlob) {
-        await addAttachment(issue.key, videoBlob, `recording-${Date.now()}.webm`);
+        console.log('[Jira] Video blob size:', videoBlob.size);
+        await addAttachment(issue.key, videoBlob, videoFilename);
+        uploadedCount++;
+        console.log('[Jira] Video attached:', videoFilename);
+      } else {
+        console.log('[Jira] getRecordingBlob returned null');
       }
     } catch (err) {
-      console.warn('Failed to attach video recording:', err);
+      console.warn('[Jira] Video attach failed:', err);
+    }
+  } else {
+    console.log('[Jira] No video to upload (recordingId:', payload.videoRecordingId, ')');
+  }
+
+  // Phase 3: Update description with wiki markup (v2 API) for inline images
+  // Wiki markup `!filename.png|thumbnail!` renders attached images inline by filename.
+  if (uploadedCount > 0) {
+    try {
+      const wikiDescription = buildWikiMarkupDescription(changeSet, allFilenames);
+      await updateIssueDescriptionWiki(issue.key, wikiDescription);
+      console.log('[Jira] Description updated with wiki markup (inline images)');
+    } catch (err) {
+      // Phase 1 ADF description is still present as fallback
+      console.warn('[Jira] Wiki description update failed:', err);
     }
   }
 
@@ -319,12 +412,9 @@ async function handleDryRunSubmission(
     createdAt: Date.now(),
   };
 
-  const description =
-    payload.changes.length <= 1 && payload.changes[0]
-      ? formatSingleChange(payload.changes[0])
-      : formatBatchedChanges(changeSet);
-
-  const summary = generateSummary(changeSet);
+  const allFilenames = payload.screenshots.map((s) => s.filename);
+  const description = buildFullDescription(changeSet, allFilenames);
+  const summary = payload.summary || generateSummary(changeSet);
   const fakeKey = `DRYRUN-${Date.now().toString(36).toUpperCase()}`;
 
   console.log(

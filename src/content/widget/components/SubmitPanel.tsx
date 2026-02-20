@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
 import type { ScreenshotData } from '../WidgetRoot';
@@ -123,11 +123,18 @@ export function SubmitPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editSummary, setEditSummary] = useState(() => generatePreviewSummary(changes));
+  const [siteUrl, setSiteUrl] = useState('');
+
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' }, (r) => {
+      if (r?.siteUrl) setSiteUrl(r.siteUrl);
+    });
+  }, []);
 
   const handleCopy = useCallback(async () => {
-    const summary = generatePreviewSummary(changes);
-    const html = generateHtml(summary, changes, description, screenshots.length);
-    const plain = generatePlainText(summary, changes, description);
+    const html = generateHtml(editSummary, changes, description, screenshots.length);
+    const plain = generatePlainText(editSummary, changes, description);
 
     try {
       await navigator.clipboard.write([
@@ -141,7 +148,7 @@ export function SubmitPanel({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [changes, description, screenshots.length]);
+  }, [editSummary, changes, description, screenshots.length]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -165,6 +172,7 @@ export function SubmitPanel({
 
     const payload: JiraSubmissionPayload = {
       changes,
+      summary: editSummary,
       manualNotes: description,
       screenshots: allScreenshots,
       videoRecordingId: videoRecordingId || undefined,
@@ -195,7 +203,9 @@ export function SubmitPanel({
 
   if (!isPreview) return null;
 
-  const summary = generatePreviewSummary(changes);
+  const issueUrl = siteUrl && result?.issueKey
+    ? `https://${siteUrl}/browse/${result.issueKey}`
+    : null;
 
   return (
     <div>
@@ -217,10 +227,16 @@ export function SubmitPanel({
       </div>
 
       <div style={{ padding: '0 16px' }}>
-        {/* Summary */}
+        {/* Summary (editable) */}
         <div className="qa-preview-card">
           <div className="qa-preview-label">Summary</div>
-          <div className="qa-preview-value" style={{ fontWeight: 600 }}>{summary}</div>
+          <input
+            className="qa-preview-summary-input"
+            type="text"
+            value={editSummary}
+            onChange={(e) => setEditSummary(e.target.value)}
+            spellCheck={false}
+          />
         </div>
 
         {/* CSS Changes table */}
@@ -332,9 +348,21 @@ export function SubmitPanel({
 
         {/* Result */}
         {result && (
-          <div className={`qa-status ${result.success ? 'qa-status-success' : 'qa-status-error'} mb-3`}>
+          <div className={`qa-status ${result.success ? 'qa-status-success' : 'qa-status-error'}`} style={{ marginBottom: 12 }}>
             {result.success ? (
-              <span>Created <strong>{result.issueKey}</strong> successfully!</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span>Created <strong>{result.issueKey}</strong></span>
+                {issueUrl && (
+                  <a
+                    href={issueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#0369a1', fontSize: 12, wordBreak: 'break-all' }}
+                  >
+                    {issueUrl}
+                  </a>
+                )}
+              </div>
             ) : (
               <span>Failed: {result.error}</span>
             )}
@@ -342,14 +370,16 @@ export function SubmitPanel({
         )}
 
         {/* Submit */}
-        <button
-          className="qa-btn qa-btn-success qa-btn-block qa-btn-lg"
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          style={{ marginBottom: 16 }}
-        >
-          {isSubmitting ? 'Submitting to Jira...' : 'Create Jira Issue'}
-        </button>
+        {!result?.success && (
+          <button
+            className="qa-btn qa-btn-success qa-btn-block qa-btn-lg"
+            onClick={handleSubmit}
+            disabled={isSubmitting || !editSummary.trim()}
+            style={{ marginBottom: 16 }}
+          >
+            {isSubmitting ? 'Submitting to Jira...' : 'Create Jira Issue'}
+          </button>
+        )}
       </div>
     </div>
   );
