@@ -44,7 +44,7 @@ export function formatSingleChange(change: CSSChange) {
     version: 1,
     type: 'doc',
     content: [
-      heading(2, 'Design QA - CSS Change'),
+      heading(2, 'BugShot - CSS Change'),
       {
         type: 'table',
         attrs: { isNumberColumnEnabled: false, layout: 'default' },
@@ -97,7 +97,7 @@ export function formatBatchedChanges(changeSet: ChangeSet) {
   const sections: object[] = [
     heading(
       2,
-      `Design QA - Batched CSS Changes (${totalProps} properties across ${changeSet.changes.length} elements)`,
+      `BugShot - Batched CSS Changes (${totalProps} properties across ${changeSet.changes.length} elements)`,
     ),
   ];
 
@@ -258,7 +258,7 @@ export function buildFullDescription(
   });
 
   if (sections.length === 0) {
-    sections.push(paragraph(text('Design QA submission')));
+    sections.push(paragraph(text('BugShot submission')));
   }
 
   return { version: 1, type: 'doc', content: sections };

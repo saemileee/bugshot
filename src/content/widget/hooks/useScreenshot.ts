@@ -10,7 +10,7 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
       const port = portRef.current;
       if (!port) { reject(new Error('Not connected')); return; }
 
-      const host = document.getElementById('design-qa-helper-root');
+      const host = document.getElementById('bugshot-root');
       if (host) host.style.display = 'none';
 
       requestAnimationFrame(() => {

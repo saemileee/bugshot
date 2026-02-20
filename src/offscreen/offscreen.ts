@@ -140,7 +140,7 @@ function getSupportedMimeType(): string {
 // IndexedDB helpers for storing recordings
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('design-qa-recordings', 1);
+    const request = indexedDB.open('bugshot-recordings', 1);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains('recordings')) {

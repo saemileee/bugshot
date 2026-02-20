@@ -51,7 +51,7 @@ function App() {
   return (
     <div className="panel-container">
       <header className="panel-header">
-        <h1>Design QA Helper</h1>
+        <h1>BugShot</h1>
         <div className="tab-bar">
           <button
             className={`tab ${activeTab === 'changes' ? 'active' : ''}`}

@@ -25,4 +25,4 @@ export const DEFAULT_TRACKED_PROPERTIES = [
 
 // Jira defaults
 export const DEFAULT_ISSUE_TYPE = 'Task';
-export const TICKET_PREFIX = '[Design QA]';
+export const TICKET_PREFIX = '[BugShot]';

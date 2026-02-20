@@ -21,7 +21,7 @@ export async function verifyN8n(
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test: true, source: 'design-qa-helper' }),
+      body: JSON.stringify({ test: true, source: 'bugshot' }),
     });
 
     if (!response.ok) {

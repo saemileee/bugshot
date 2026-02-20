@@ -16,7 +16,7 @@ export function useElementPicker() {
     if (!isPicking) return;
 
     const highlight = document.createElement('div');
-    highlight.id = 'design-qa-picker-highlight';
+    highlight.id = 'bugshot-picker-highlight';
     highlight.style.cssText = [
       'position:fixed',
       'z-index:2147483646',
@@ -33,7 +33,7 @@ export function useElementPicker() {
 
     // Tooltip label
     const label = document.createElement('div');
-    label.id = 'design-qa-picker-label';
+    label.id = 'bugshot-picker-label';
     label.style.cssText = [
       'position:fixed',
       'z-index:2147483646',
@@ -61,9 +61,9 @@ export function useElementPicker() {
     if (!isPicking) return;
 
     const isWidgetElement = (el: Element) =>
-      el.id === 'design-qa-helper-root' ||
-      el.id === 'design-qa-picker-highlight' ||
-      el.id === 'design-qa-picker-label';
+      el.id === 'bugshot-root' ||
+      el.id === 'bugshot-picker-highlight' ||
+      el.id === 'bugshot-picker-label';
 
     const handleMouseOver = (e: MouseEvent) => {
       const target = e.target as Element;
@@ -81,7 +81,7 @@ export function useElementPicker() {
       }
 
       // Update label
-      const label = document.getElementById('design-qa-picker-label');
+      const label = document.getElementById('bugshot-picker-label');
       if (label) {
         let tag = target.tagName.toLowerCase();
         if (target.id) tag += '#' + target.id;
@@ -133,7 +133,7 @@ export function useElementPicker() {
     if (!pickedElement) return;
 
     const overlay = document.createElement('div');
-    overlay.id = 'design-qa-picked-highlight';
+    overlay.id = 'bugshot-picked-highlight';
     overlay.style.cssText = [
       'position:fixed',
       'z-index:2147483645',

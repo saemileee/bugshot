@@ -2,9 +2,9 @@ import { defineManifest } from '@crxjs/vite-plugin';
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'Design QA Helper',
+  name: 'BugShot',
   version: '1.0.0',
-  description: 'Streamline design QA by tracking CSS changes and creating Jira tickets with screenshots',
+  description: 'Capture bugs and design issues, submit to Jira, GitHub, and N8N with screenshots',
 
   icons: {
     '16': 'src/assets/icons/icon-16.png',

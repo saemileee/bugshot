@@ -120,7 +120,7 @@ function buildGithubBody(payload: SubmissionPayload): string {
   lines.push(`- Captured: ${new Date().toLocaleString()}`);
   lines.push('');
   lines.push('---');
-  lines.push('*Created by Design QA Helper*');
+  lines.push('*Created by BugShot*');
 
   return lines.join('\n');
 }

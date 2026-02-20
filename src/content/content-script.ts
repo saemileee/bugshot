@@ -6,10 +6,10 @@ import './mutation-observer';
 
 function injectWidget() {
   // Prevent double injection
-  if (document.getElementById('design-qa-helper-root')) return;
+  if (document.getElementById('bugshot-root')) return;
 
   const host = document.createElement('div');
-  host.id = 'design-qa-helper-root';
+  host.id = 'bugshot-root';
   host.style.cssText =
     'all: initial; position: fixed; z-index: 2147483647; top: 0; left: 0; width: 0; height: 0; pointer-events: none;';
   document.body.appendChild(host);

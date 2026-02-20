@@ -73,7 +73,7 @@ async function ensureOffscreenDocument(): Promise<boolean> {
   await chrome.offscreen.createDocument({
     url: 'src/offscreen/offscreen.html',
     reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA],
-    justification: 'Screen recording via getDisplayMedia for Design QA',
+    justification: 'Screen recording via getDisplayMedia for BugShot',
   });
 
   return true;

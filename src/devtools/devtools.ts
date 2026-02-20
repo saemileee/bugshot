@@ -1,5 +1,5 @@
 chrome.devtools.panels.create(
-  'Design QA',
+  'BugShot',
   '',
   'src/devtools/panel/panel.html',
 );

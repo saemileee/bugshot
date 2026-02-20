@@ -417,7 +417,7 @@ function GithubSection() {
               </div>
               <div className="qa-settings-field">
                 <label className="qa-settings-label">Labels <span className="qa-settings-hint">optional, comma-separated</span></label>
-                <input className="qa-settings-input" type="text" placeholder="design-qa, bug" value={labels} onChange={(e) => setLabels(e.target.value)} spellCheck={false} />
+                <input className="qa-settings-input" type="text" placeholder="bugshot, bug" value={labels} onChange={(e) => setLabels(e.target.value)} spellCheck={false} />
               </div>
               {error && <div className="qa-settings-status qa-settings-status-error">{error}</div>}
               <button className="qa-btn qa-btn-primary qa-btn-block" onClick={handleConnect} disabled={loading} style={{ marginTop: 8 }}>

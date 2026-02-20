@@ -9,7 +9,7 @@ function App() {
   return (
     <div className="popup-container">
       <header className="popup-header">
-        <h1>Design QA Helper</h1>
+        <h1>BugShot</h1>
       </header>
 
       <ConnectionStatus />
