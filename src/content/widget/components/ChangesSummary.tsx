@@ -5,8 +5,6 @@ import type { CaptureStatus } from '../hooks/useContentCSSTracking';
 interface ChangesViewProps {
   changes: CSSChange[];
   captureStatus: CaptureStatus;
-  isPicking: boolean;
-  onStartPicking: () => void;
   onRemoveChange: (id: string) => void;
   onClearChanges: () => void;
 }
@@ -28,19 +26,11 @@ function classifyProps(props: CSSPropertyChange[]) {
 export function ChangesSummary({
   changes,
   captureStatus,
-  isPicking,
-  onStartPicking,
   onRemoveChange,
   onClearChanges,
 }: ChangesViewProps) {
   const [clearConfirm, setClearConfirm] = useState(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const isIdle =
-    captureStatus.state === 'idle' ||
-    captureStatus.state === 'error' ||
-    captureStatus.state === 'no_diff' ||
-    captureStatus.state === 'success';
 
   const handleClearAll = useCallback(() => {
     if (!clearConfirm) {
@@ -48,7 +38,6 @@ export function ChangesSummary({
       clearTimer.current = setTimeout(() => setClearConfirm(false), 2000);
       return;
     }
-    // Second click within 2s → actually clear
     if (clearTimer.current) clearTimeout(clearTimer.current);
     setClearConfirm(false);
     onClearChanges();
@@ -56,47 +45,33 @@ export function ChangesSummary({
 
   return (
     <div>
-      {/* ── Pick Element button (only when idle) ── */}
-      {isIdle && (
-        <div className="qa-capture-flow">
-          <button
-            className="qa-btn qa-btn-primary"
-            onClick={onStartPicking}
-            disabled={isPicking}
-            style={{ flex: 1 }}
-          >
-            {isPicking ? (
-              <>
-                <span className="qa-recording-dot" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 6, verticalAlign: 'middle' }} />
-                Picking... click an element
-              </>
-            ) : (
-              'Pick Element'
-            )}
-          </button>
-        </div>
-      )}
-
       {/* ── Brief status (only errors/warnings) ── */}
       {captureStatus.state === 'error' && (
-        <div className="qa-status qa-status-error" style={{ marginTop: 8 }}>
+        <div className="qa-status qa-status-error">
           {captureStatus.message}
         </div>
       )}
       {captureStatus.state === 'no_diff' && (
-        <div className="qa-status qa-status-warn" style={{ marginTop: 8 }}>
+        <div className="qa-status qa-status-warn">
           No CSS changes. You can still save with a description.
         </div>
       )}
       {captureStatus.state === 'success' && (
-        <div className="qa-status qa-status-success" style={{ marginTop: 8 }}>
+        <div className="qa-status qa-status-success">
           {captureStatus.change.properties.length} change(s) captured!
         </div>
       )}
 
-      {/* ── Change list (only when there are changes) ── */}
+      {/* ── Empty state ── */}
+      {changes.length === 0 && captureStatus.state === 'idle' && (
+        <div className="qa-empty-hint">
+          Pick an element from the toolbar to start
+        </div>
+      )}
+
+      {/* ── Change list ── */}
       {changes.length > 0 && (
-        <div style={{ marginTop: 12 }}>
+        <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span className="qa-change-badge">
               {changes.length} change{changes.length !== 1 ? 's' : ''}

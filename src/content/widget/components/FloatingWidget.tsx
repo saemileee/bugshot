@@ -1,44 +1,61 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 
+export type ToolbarTab = 'changes' | 'settings' | null;
+
 interface FloatingWidgetProps {
-  isOpen: boolean;
-  onToggle: () => void;
+  activeTab: ToolbarTab;
+  onTabChange: (tab: ToolbarTab) => void;
   isRecording: boolean;
+  isPicking: boolean;
+  isCapturing?: boolean;
+  hasContent: boolean;
+  onPickElement: () => void;
+  onScreenshot: () => void;
+  onRecordToggle: () => void;
   children: ReactNode;
   footer?: ReactNode;
 }
 
 const MIN_W = 360;
-const MIN_H = 320;
-const DEFAULT_W = 420;
-const DEFAULT_H = 560;
+const DEFAULT_W = 400;
 
 export function FloatingWidget({
-  isOpen,
-  onToggle,
+  activeTab,
+  onTabChange,
   isRecording,
+  isPicking,
+  isCapturing,
+  hasContent,
+  onPickElement,
+  onScreenshot,
+  onRecordToggle,
   children,
   footer,
 }: FloatingWidgetProps) {
-  const [btnPos, setBtnPos] = useState({ x: 20, y: 20 });
-  const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
+  // Bar: centered bottom, draggable
+  const [barPos, setBarPos] = useState(() => ({
+    left: Math.round((window.innerWidth - 300) / 2),
+    bottom: 20,
+  }));
+  const [panelW, setPanelW] = useState(DEFAULT_W);
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
+  const isPanelOpen = activeTab !== null;
 
-  // ── Button drag ──
-  const handleBtnMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isOpen) return;
+  // ── Toolbar drag ──
+  const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.qa-bar-btn')) return;
     isDragging.current = true;
-    dragOffset.current = { x: e.clientX - btnPos.x, y: e.clientY - btnPos.y };
+    dragOffset.current = { x: e.clientX - barPos.left, y: e.clientY + barPos.bottom };
     e.preventDefault();
-  }, [isOpen, btnPos]);
+  }, [barPos]);
 
   useEffect(() => {
     const move = (e: MouseEvent) => {
       if (!isDragging.current) return;
-      setBtnPos({
-        x: Math.max(0, Math.min(window.innerWidth - 40, e.clientX - dragOffset.current.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dragOffset.current.y)),
+      setBarPos({
+        left: Math.max(0, Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x)),
+        bottom: Math.max(0, Math.min(window.innerHeight - 44, dragOffset.current.y - e.clientY)),
       });
     };
     const up = () => { isDragging.current = false; };
@@ -50,22 +67,16 @@ export function FloatingWidget({
     };
   }, []);
 
-  // ── Panel resize (top-left handle) ──
+  // ── Panel resize (left edge handle — width only) ──
   const handleResizeDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
-    const startY = e.clientY;
-    const startW = size.w;
-    const startH = size.h;
+    const startW = panelW;
 
     const move = (ev: MouseEvent) => {
       const dw = startX - ev.clientX;
-      const dh = startY - ev.clientY;
-      setSize({
-        w: Math.max(MIN_W, Math.min(900, startW + dw)),
-        h: Math.max(MIN_H, Math.min(window.innerHeight - 80, startH + dh)),
-      });
+      setPanelW(Math.max(MIN_W, Math.min(700, startW + dw)));
     };
     const up = () => {
       document.removeEventListener('mousemove', move);
@@ -73,61 +84,26 @@ export function FloatingWidget({
     };
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', up);
-  }, [size]);
+  }, [panelW]);
+
+  const handleTabClick = useCallback((tab: ToolbarTab) => {
+    onTabChange(activeTab === tab ? null : tab);
+  }, [activeTab, onTabChange]);
 
   return (
     <>
-      {/* Floating trigger */}
-      <div
-        className="qa-trigger"
-        style={{ right: btnPos.x, bottom: btnPos.y, left: 'auto', top: 'auto' }}
-        onMouseDown={handleBtnMouseDown}
-        onClick={() => { if (!isDragging.current) onToggle(); }}
-        title="Design QA Helper"
-      >
-        {isRecording && (
-          <div className="qa-recording-dot" style={{ position: 'absolute', top: 2, right: 2 }} />
-        )}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-          <polyline points="10 17 15 12 10 7" />
-          <line x1="15" y1="12" x2="3" y2="12" />
-        </svg>
-      </div>
-
-      {/* Panel */}
-      {isOpen && (
+      {/* ── Y-axis Panel (right side drawer) ── */}
+      {isPanelOpen && (
         <div
           className="qa-panel qa-slide-in"
-          style={{
-            right: btnPos.x,
-            bottom: btnPos.y + 46,
-            left: 'auto',
-            top: 'auto',
-            width: size.w,
-            height: size.h,
-          }}
+          style={{ width: panelW }}
         >
-          {/* Resize handle (top-left) */}
           <div className="qa-resize-handle" onMouseDown={handleResizeDown} />
 
-          {/* Header */}
-          <div className="qa-panel-header">
-            <h2>Design QA</h2>
-            <button className="qa-panel-close" onClick={onToggle} title="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Scrollable body */}
           <div className="qa-panel-scroll">
             {children}
           </div>
 
-          {/* Fixed footer */}
           {footer && (
             <div className="qa-panel-footer">
               {footer}
@@ -135,6 +111,100 @@ export function FloatingWidget({
           )}
         </div>
       )}
+
+      {/* ── X-axis Toolbar (always visible) ── */}
+      <div
+        className="qa-bar"
+        style={{ left: barPos.left, bottom: barPos.bottom }}
+        onMouseDown={handleBarMouseDown}
+      >
+        {/* Drag grip */}
+        <div className="qa-bar-grip">
+          <svg width="6" height="14" viewBox="0 0 6 14" fill="currentColor">
+            <circle cx="1.5" cy="1.5" r="1" /><circle cx="4.5" cy="1.5" r="1" />
+            <circle cx="1.5" cy="5" r="1" /><circle cx="4.5" cy="5" r="1" />
+            <circle cx="1.5" cy="8.5" r="1" /><circle cx="4.5" cy="8.5" r="1" />
+            <circle cx="1.5" cy="12" r="1" /><circle cx="4.5" cy="12" r="1" />
+          </svg>
+        </div>
+
+        <div className="qa-bar-divider" />
+
+        {/* Pick Element */}
+        <button
+          className={`qa-bar-btn ${isPicking ? 'active' : ''}`}
+          onClick={onPickElement}
+          title={isPicking ? 'Picking...' : 'Pick Element'}
+        >
+          {isPicking ? (
+            <span className="qa-bar-dot" />
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+              <path d="M13 13l6 6" />
+            </svg>
+          )}
+        </button>
+
+        {/* Screenshot */}
+        <button
+          className={`qa-bar-btn ${isCapturing ? 'active' : ''}`}
+          onClick={onScreenshot}
+          disabled={isCapturing}
+          title="Take Screenshot"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </button>
+
+        {/* Record */}
+        <button
+          className={`qa-bar-btn ${isRecording ? 'recording' : ''}`}
+          onClick={onRecordToggle}
+          title={isRecording ? 'Stop Recording' : 'Record Screen'}
+        >
+          {isRecording ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="4" fill="currentColor" />
+            </svg>
+          )}
+        </button>
+
+        <div className="qa-bar-divider" />
+
+        {/* Changes tab */}
+        <button
+          className={`qa-bar-btn ${activeTab === 'changes' ? 'active' : ''}`}
+          onClick={() => handleTabClick('changes')}
+          title="Changes"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="9" y1="21" x2="9" y2="9" />
+          </svg>
+          {hasContent && <span className="qa-bar-badge" />}
+        </button>
+
+        {/* Settings tab */}
+        <button
+          className={`qa-bar-btn ${activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => handleTabClick('settings')}
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
     </>
   );
 }

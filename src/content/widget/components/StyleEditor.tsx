@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { PropertyValueInput } from './PropertyValueInput';
 
 interface StyleEditorProps {
   element: Element;
@@ -334,13 +335,11 @@ export function StyleEditor({ element }: StyleEditorProps) {
                     {p.property}
                   </span>
                   <span className="qa-sp-c">:</span>
-                  <input
-                    type="text"
-                    className="qa-sp-pv"
+                  <PropertyValueInput
+                    property={p.property}
                     value={p.value}
-                    onChange={(e) => handleValueChange(block.id, p.property, e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    spellCheck={false}
+                    onChange={(val) => handleValueChange(block.id, p.property, val)}
+                    overridden={p.overridden}
                   />
                   {p.priority === 'important' && <span className="qa-sp-imp">!important</span>}
                   <span className="qa-sp-sc">;</span>
