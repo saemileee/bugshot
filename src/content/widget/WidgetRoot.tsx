@@ -26,6 +26,8 @@ export function WidgetRoot() {
   const [description, setDescription] = useState('');
   const [changes, setChanges] = useState<CSSChange[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const { port, sendMessage } = useSWMessaging();
   const picker = useElementPicker();
@@ -36,8 +38,9 @@ export function WidgetRoot() {
   const [editNote, setEditNote] = useState('');
 
   const isEditing = tracking.status.state === 'before_captured';
+  const hasContent = screenshots.length > 0 || description.trim() || changes.length > 0;
 
-  // Picker ↔ panel management
+  // Picker -> panel management
   useEffect(() => {
     if (picker.isPicking) setIsOpen(false);
   }, [picker.isPicking]);
@@ -90,7 +93,7 @@ export function WidgetRoot() {
       if (note) change.description = note;
       setChanges((prev) => [...prev, change]);
     } else if (note) {
-      // No CSS diff but has description → save as note-only change
+      // No CSS diff but has description -> save as note-only change
       const selector = tracking.status.state === 'before_captured'
         ? tracking.status.selector
         : el?.tagName.toLowerCase() || 'element';
@@ -142,108 +145,175 @@ export function WidgetRoot() {
     setScreenshots([]);
     setDescription('');
     setChanges([]);
+    setShowPreview(false);
   }, []);
 
-  return (
-    <FloatingWidget
-      isOpen={isOpen}
-      onToggle={() => setIsOpen((p) => !p)}
-      isRecording={isRecording}
-    >
-      {/* ── Section: CSS Changes ── */}
-      <section className="qa-section">
-        <h3 className="qa-section-title">CSS Changes</h3>
-        <ChangesSummary
-          changes={changes}
-          captureStatus={tracking.status}
-          isPicking={picker.isPicking}
-          onStartPicking={handleStartPicking}
-          onCaptureAfter={handleCaptureAfter}
-          onResetCapture={handleResetCapture}
-          onRemoveChange={handleRemoveChange}
-          onClearChanges={handleClearChanges}
-        />
-      </section>
+  // Auto-open notes when description exists
+  useEffect(() => {
+    if (description.trim()) setNotesOpen(true);
+  }, [description]);
 
-      {/* ── Section: Note for non-CSS changes (visible when editing) ── */}
-      {isEditing && (
-        <>
-          <hr className="qa-divider" />
-          <section className="qa-section">
-            <h3 className="qa-section-title">Describe Change</h3>
-            <textarea
-              className="qa-textarea"
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              placeholder="Can't edit via styles? Describe what should change..."
-              spellCheck={false}
-            />
-          </section>
-        </>
-      )}
+  // ── Editing selector for header bar ──
+  const editingSelector = isEditing && tracking.status.state === 'before_captured'
+    ? tracking.status.selector
+    : '';
 
-      {/* ── Section: Style Editor (visible when editing) ── */}
-      {isEditing && picker.pickedElement && (
-        <>
-          <hr className="qa-divider" />
-          <section className="qa-section qa-section-styles">
-            <h3 className="qa-section-title">Styles</h3>
-            <StyleEditor
-              element={picker.pickedElement}
-              selector={
-                tracking.status.state === 'before_captured'
-                  ? tracking.status.selector
-                  : ''
-              }
-            />
-          </section>
-        </>
-      )}
-
-      <hr className="qa-divider" />
-
-      {/* ── Section: Screenshots ── */}
-      <section className="qa-section">
-        <h3 className="qa-section-title">Screenshots</h3>
-        <ScreenshotCapture
-          screenshots={screenshots}
-          onCaptured={handleScreenshotCaptured}
-          onUpdated={handleScreenshotUpdated}
-          onRemove={handleRemoveScreenshot}
-          port={port}
-        />
-        <div style={{ marginTop: 12 }}>
-          <RecordingControls
-            isRecording={isRecording}
-            onRecordingChange={setIsRecording}
-            sendMessage={sendMessage}
-          />
+  // ── Footer content ──
+  const footerContent = (() => {
+    if (isEditing) {
+      return (
+        <div className="qa-footer-actions">
+          <button className="qa-btn qa-btn-ghost" onClick={handleResetCapture}>
+            Cancel
+          </button>
+          <button className="qa-btn qa-btn-success qa-footer-primary" onClick={handleCaptureAfter}>
+            Capture Changes
+          </button>
         </div>
-      </section>
+      );
+    }
 
-      <hr className="qa-divider" />
+    if (showPreview) return null; // Preview mode handles its own buttons
 
-      {/* ── Section: Notes ── */}
-      <section className="qa-section">
-        <h3 className="qa-section-title">Notes</h3>
-        <ManualDescription
-          description={description}
-          onDescriptionChange={setDescription}
-        />
-      </section>
+    if (hasContent) {
+      return (
+        <div className="qa-footer-actions">
+          <button
+            className="qa-btn qa-btn-success qa-footer-primary"
+            onClick={() => setShowPreview(true)}
+          >
+            Review & Submit
+          </button>
+        </div>
+      );
+    }
 
-      <hr className="qa-divider" />
+    return null;
+  })();
 
-      {/* ── Section: Submit ── */}
-      <section className="qa-section">
+  // ── Preview mode (full panel takeover) ──
+  if (showPreview) {
+    return (
+      <FloatingWidget
+        isOpen={isOpen}
+        onToggle={() => setIsOpen((p) => !p)}
+        isRecording={isRecording}
+      >
         <SubmitPanel
           screenshots={screenshots}
           description={description}
           changes={changes}
           sendMessage={sendMessage}
           onSuccess={handleSubmitSuccess}
+          onBack={() => setShowPreview(false)}
+          isPreview
         />
-      </section>
+      </FloatingWidget>
+    );
+  }
+
+  return (
+    <FloatingWidget
+      isOpen={isOpen}
+      onToggle={() => setIsOpen((p) => !p)}
+      isRecording={isRecording}
+      footer={footerContent}
+    >
+      {/* ── Editing bar ── */}
+      {isEditing && (
+        <div className="qa-editing-bar">
+          <span className="qa-editing-bar-label">Editing</span>
+          <code className="qa-editing-bar-selector">{editingSelector}</code>
+        </div>
+      )}
+
+      {/* ── Editing mode: Styles + Describe ── */}
+      {isEditing && picker.pickedElement && (
+        <section className="qa-section qa-section-styles">
+          <h3 className="qa-section-title">Styles</h3>
+          <StyleEditor
+            element={picker.pickedElement}
+            selector={editingSelector}
+          />
+        </section>
+      )}
+
+      {isEditing && (
+        <section className="qa-section">
+          <h3 className="qa-section-title">Describe Change</h3>
+          <textarea
+            className="qa-textarea"
+            value={editNote}
+            onChange={(e) => setEditNote(e.target.value)}
+            placeholder="Can't edit via styles? Describe what should change..."
+            spellCheck={false}
+          />
+        </section>
+      )}
+
+      {/* ── Normal mode: Changes + Screenshots + Notes ── */}
+      {!isEditing && (
+        <>
+          {/* CSS Changes */}
+          <section className="qa-section">
+            {changes.length > 0 && <h3 className="qa-section-title">CSS Changes</h3>}
+            <ChangesSummary
+              changes={changes}
+              captureStatus={tracking.status}
+              isPicking={picker.isPicking}
+              onStartPicking={handleStartPicking}
+              onRemoveChange={handleRemoveChange}
+              onClearChanges={handleClearChanges}
+            />
+          </section>
+
+          <hr className="qa-divider" />
+
+          {/* Screenshots */}
+          <section className="qa-section">
+            <h3 className="qa-section-title">Screenshots</h3>
+            <ScreenshotCapture
+              screenshots={screenshots}
+              onCaptured={handleScreenshotCaptured}
+              onUpdated={handleScreenshotUpdated}
+              onRemove={handleRemoveScreenshot}
+              port={port}
+            />
+            <div style={{ marginTop: 12 }}>
+              <RecordingControls
+                isRecording={isRecording}
+                onRecordingChange={setIsRecording}
+                sendMessage={sendMessage}
+              />
+            </div>
+          </section>
+
+          <hr className="qa-divider" />
+
+          {/* Notes (collapsible) */}
+          <section className="qa-section">
+            <button
+              className="qa-section-toggle"
+              onClick={() => setNotesOpen((p) => !p)}
+            >
+              <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Notes</h3>
+              <span className={`qa-section-chevron ${notesOpen ? 'open' : ''}`}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
+            </button>
+            {notesOpen && (
+              <div style={{ marginTop: 8 }}>
+                <ManualDescription
+                  description={description}
+                  onDescriptionChange={setDescription}
+                />
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </FloatingWidget>
   );
 }

@@ -87,6 +87,19 @@
   @apply flex-1 overflow-y-auto;
 }
 
+/* ── Fixed footer ── */
+.qa-panel-footer {
+  @apply flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3;
+}
+
+.qa-footer-actions {
+  @apply flex items-center gap-2;
+}
+
+.qa-footer-primary {
+  flex: 1;
+}
+
 /* ── Sections ── */
 .qa-section {
   @apply px-4 py-3;
@@ -107,6 +120,48 @@
 
 .qa-divider {
   @apply border-0 border-t border-gray-100 mx-4;
+}
+
+/* ── Editing bar ── */
+.qa-editing-bar {
+  @apply flex items-center gap-2 px-4 py-2 text-xs;
+  background: linear-gradient(135deg, #dbeafe, #ede9fe);
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.qa-editing-bar-label {
+  @apply font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-xs;
+  flex-shrink: 0;
+}
+
+.qa-editing-bar-selector {
+  @apply font-mono text-xs text-purple-700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ── Section toggle (collapsible) ── */
+.qa-section-toggle {
+  @apply flex items-center justify-between w-full cursor-pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.qa-section-chevron {
+  @apply text-gray-400 transition-transform;
+  display: flex;
+}
+
+.qa-section-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* ── Clear All confirm state ── */
+.qa-btn-clear-confirm {
+  @apply text-red-500 font-semibold;
 }
 
 /* ── Buttons ── */
@@ -590,15 +645,23 @@
   flex-shrink: 0;
 }
 
-/* Add property row (click empty area to show) */
-.qa-sp-add-hint {
-  height: 14px;
-  cursor: text;
+/* Add property button */
+.qa-sp-add-btn {
+  display: inline-block;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 10px;
+  color: #6b7280;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-top: 1px;
+  border-radius: 2px;
 }
 
-.qa-sp-add-hint:hover {
+.qa-sp-add-btn:hover {
+  color: #3b82f6;
   background: #f0f9ff;
-  border-radius: 2px;
 }
 
 .qa-sp-add {

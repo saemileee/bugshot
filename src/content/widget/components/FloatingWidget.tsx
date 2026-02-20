@@ -5,6 +5,7 @@ interface FloatingWidgetProps {
   onToggle: () => void;
   isRecording: boolean;
   children: ReactNode;
+  footer?: ReactNode;
 }
 
 const MIN_W = 360;
@@ -17,6 +18,7 @@ export function FloatingWidget({
   onToggle,
   isRecording,
   children,
+  footer,
 }: FloatingWidgetProps) {
   const [btnPos, setBtnPos] = useState({ x: 20, y: 20 });
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
@@ -124,6 +126,13 @@ export function FloatingWidget({
           <div className="qa-panel-scroll">
             {children}
           </div>
+
+          {/* Fixed footer */}
+          {footer && (
+            <div className="qa-panel-footer">
+              {footer}
+            </div>
+          )}
         </div>
       )}
     </>

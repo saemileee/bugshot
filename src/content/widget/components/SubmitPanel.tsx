@@ -10,6 +10,8 @@ interface SubmitPanelProps {
   changes: CSSChange[];
   sendMessage: (msg: ExtensionMessage) => Promise<ExtensionMessage>;
   onSuccess: () => void;
+  onBack?: () => void;
+  isPreview?: boolean;
 }
 
 const SPECIAL_PROPS = new Set(['className', 'textContent']);
@@ -30,16 +32,13 @@ export function SubmitPanel({
   changes,
   sendMessage,
   onSuccess,
+  onBack,
+  isPreview,
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [result, setResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
 
-  const hasContent = screenshots.length > 0 || description.trim() || changes.length > 0;
-
   const handleSubmit = async () => {
-    if (!hasContent) return;
-
     setIsSubmitting(true);
     setResult(null);
 
@@ -78,7 +77,6 @@ export function SubmitPanel({
         });
 
         if (response.success) {
-          setShowPreview(false);
           setTimeout(onSuccess, 3000);
         }
       }
@@ -89,19 +87,22 @@ export function SubmitPanel({
     }
   };
 
-  // ── Preview mode ──
-  if (showPreview) {
-    const summary = generatePreviewSummary(changes);
+  if (!isPreview) return null;
 
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Ticket Preview</h3>
-          <button className="qa-btn qa-btn-ghost" onClick={() => setShowPreview(false)}>
-            Close
+  const summary = generatePreviewSummary(changes);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4" style={{ padding: '0 16px', paddingTop: 12 }}>
+        <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Ticket Preview</h3>
+        {onBack && (
+          <button className="qa-btn qa-btn-ghost" onClick={onBack}>
+            Back
           </button>
-        </div>
+        )}
+      </div>
 
+      <div style={{ padding: '0 16px' }}>
         {/* Summary */}
         <div className="qa-preview-card">
           <div className="qa-preview-label">Summary</div>
@@ -231,48 +232,11 @@ export function SubmitPanel({
           className="qa-btn qa-btn-success qa-btn-block qa-btn-lg"
           onClick={handleSubmit}
           disabled={isSubmitting}
+          style={{ marginBottom: 16 }}
         >
           {isSubmitting ? 'Submitting to Jira...' : 'Create Jira Issue'}
         </button>
       </div>
-    );
-  }
-
-  // ── Default view ──
-  return (
-    <div>
-      {/* Result */}
-      {result && (
-        <div className={`qa-status ${result.success ? 'qa-status-success' : 'qa-status-error'} mb-3`}>
-          {result.success ? (
-            <span>Created <strong>{result.issueKey}</strong> successfully!</span>
-          ) : (
-            <span>Failed: {result.error}</span>
-          )}
-        </div>
-      )}
-
-      {!hasContent ? (
-        <div className="qa-status qa-status-info">
-          <span>Capture screenshots, describe the issue, or track CSS changes before submitting.</span>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <button
-            className="qa-btn qa-btn-secondary flex-1 qa-btn-lg"
-            onClick={() => setShowPreview(true)}
-          >
-            Preview
-          </button>
-          <button
-            className="qa-btn qa-btn-success flex-1 qa-btn-lg"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Submitting...' : 'Create Issue'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from 'react';
 import type { CSSChange, CSSPropertyChange } from '@/shared/types/css-change';
 import type { CaptureStatus } from '../hooks/useContentCSSTracking';
 
@@ -6,8 +7,6 @@ interface ChangesViewProps {
   captureStatus: CaptureStatus;
   isPicking: boolean;
   onStartPicking: () => void;
-  onCaptureAfter: () => void;
-  onResetCapture: () => void;
   onRemoveChange: (id: string) => void;
   onClearChanges: () => void;
 }
@@ -31,23 +30,35 @@ export function ChangesSummary({
   captureStatus,
   isPicking,
   onStartPicking,
-  onCaptureAfter,
-  onResetCapture,
   onRemoveChange,
   onClearChanges,
 }: ChangesViewProps) {
-  const isRecording = captureStatus.state === 'before_captured';
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isIdle =
     captureStatus.state === 'idle' ||
     captureStatus.state === 'error' ||
     captureStatus.state === 'no_diff' ||
     captureStatus.state === 'success';
 
+  const handleClearAll = useCallback(() => {
+    if (!clearConfirm) {
+      setClearConfirm(true);
+      clearTimer.current = setTimeout(() => setClearConfirm(false), 2000);
+      return;
+    }
+    // Second click within 2s → actually clear
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    setClearConfirm(false);
+    onClearChanges();
+  }, [clearConfirm, onClearChanges]);
+
   return (
     <div>
-      {/* ── Compact controls ── */}
-      <div className="qa-capture-flow">
-        {isIdle && (
+      {/* ── Pick Element button (only when idle) ── */}
+      {isIdle && (
+        <div className="qa-capture-flow">
           <button
             className="qa-btn qa-btn-primary"
             onClick={onStartPicking}
@@ -57,25 +68,14 @@ export function ChangesSummary({
             {isPicking ? (
               <>
                 <span className="qa-recording-dot" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 6, verticalAlign: 'middle' }} />
-                Click an element...
+                Picking... click an element
               </>
             ) : (
-              'Record'
+              'Pick Element'
             )}
           </button>
-        )}
-
-        {isRecording && (
-          <>
-            <button className="qa-btn qa-btn-success" onClick={onCaptureAfter} style={{ flex: 1 }}>
-              Done
-            </button>
-            <button className="qa-btn qa-btn-ghost" onClick={onResetCapture}>
-              Cancel
-            </button>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Brief status (only errors/warnings) ── */}
       {captureStatus.state === 'error' && (
@@ -85,7 +85,7 @@ export function ChangesSummary({
       )}
       {captureStatus.state === 'no_diff' && (
         <div className="qa-status qa-status-warn" style={{ marginTop: 8 }}>
-          No changes detected.
+          No CSS changes. You can still save with a description.
         </div>
       )}
       {captureStatus.state === 'success' && (
@@ -101,8 +101,11 @@ export function ChangesSummary({
             <span className="qa-change-badge">
               {changes.length} change{changes.length !== 1 ? 's' : ''}
             </span>
-            <button className="qa-btn qa-btn-ghost" onClick={onClearChanges}>
-              Clear All
+            <button
+              className={`qa-btn qa-btn-ghost ${clearConfirm ? 'qa-btn-clear-confirm' : ''}`}
+              onClick={handleClearAll}
+            >
+              {clearConfirm ? 'Clear All?' : 'Clear All'}
             </button>
           </div>
 

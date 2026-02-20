@@ -347,7 +347,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
                 </div>
               ))}
 
-              {/* Click to add property */}
+              {/* Add property */}
               {addingToBlock === block.id ? (
                 <div className="qa-sp-add">
                   <input
@@ -378,10 +378,12 @@ export function StyleEditor({ element }: StyleEditorProps) {
                   <span className="qa-sp-sc">;</span>
                 </div>
               ) : (
-                <div
-                  className="qa-sp-add-hint"
+                <button
+                  className="qa-sp-add-btn"
                   onClick={() => { setAddingToBlock(block.id); setNewPropName(''); setNewPropValue(''); }}
-                />
+                >
+                  + property
+                </button>
               )}
             </div>
           </div>
