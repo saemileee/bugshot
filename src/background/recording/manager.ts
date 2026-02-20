@@ -1,5 +1,5 @@
 // Video recording manager
-// Orchestrates offscreen document creation and tabCapture stream
+// Uses offscreen document with getDisplayMedia (no activeTab requirement)
 
 let isRecording = false;
 let recordingTabId: number | null = null;
@@ -9,36 +9,21 @@ export async function startRecording(tabId: number): Promise<void> {
     throw new Error('Already recording');
   }
 
-  // Resolve actual tab ID if 0 was passed (from content script)
+  // Resolve actual tab ID for state tracking
   let targetTabId = tabId;
   if (targetTabId === 0) {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!activeTab?.id) throw new Error('No active tab found');
-    targetTabId = activeTab.id;
+    targetTabId = activeTab?.id ?? 0;
   }
 
   // Ensure offscreen document exists
   await ensureOffscreenDocument();
 
-  // Get a media stream ID for the tab
-  const streamId = await new Promise<string>((resolve, reject) => {
-    chrome.tabCapture.getMediaStreamId(
-      { targetTabId },
-      (id) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(id);
-        }
-      },
-    );
-  });
-
-  // Tell offscreen document to start recording and wait for confirmation
+  // Tell offscreen document to start recording via getDisplayMedia
+  // Chrome will show a tab/screen picker dialog to the user
   const result: { success: boolean; error?: string } = await chrome.runtime.sendMessage({
     type: 'start-recording',
     target: 'offscreen',
-    streamId,
   });
 
   if (!result?.success) {
@@ -55,15 +40,21 @@ export async function startRecording(tabId: number): Promise<void> {
 export async function stopRecording(): Promise<void> {
   if (!isRecording) return;
 
-  await chrome.runtime.sendMessage({
-    type: 'stop-recording',
-    target: 'offscreen',
-  });
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'stop-recording',
+      target: 'offscreen',
+    });
+  } catch (err) {
+    console.warn('Failed to send stop-recording to offscreen:', err);
+  }
 
   isRecording = false;
   recordingTabId = null;
 
-  await chrome.alarms.clear('recording-keepalive');
+  try {
+    await chrome.alarms.clear('recording-keepalive');
+  } catch { /* ignore */ }
 }
 
 export function getRecordingState(): { isRecording: boolean; tabId: number | null } {
@@ -80,8 +71,8 @@ async function ensureOffscreenDocument(): Promise<void> {
 
   await chrome.offscreen.createDocument({
     url: 'src/offscreen/offscreen.html',
-    reasons: [chrome.offscreen.Reason.USER_MEDIA],
-    justification: 'Screen recording for Design QA',
+    reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA],
+    justification: 'Screen recording via getDisplayMedia for Design QA',
   });
 }
 

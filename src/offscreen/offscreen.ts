@@ -10,14 +10,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   switch (message.type) {
     case 'start-recording':
-      startRecording(message.streamId)
+      startRecording()
         .then(() => sendResponse({ success: true }))
         .catch((err: Error) => sendResponse({ success: false, error: err.message }));
       return true; // async
 
     case 'stop-recording':
-      stopRecording();
-      sendResponse({ success: true });
+      try {
+        stopRecording();
+        sendResponse({ success: true });
+      } catch (err) {
+        sendResponse({ success: false, error: (err as Error).message });
+      }
       break;
 
     case 'get-recording':
@@ -28,7 +32,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-async function startRecording(streamId: string) {
+async function startRecording() {
   // Clean up any previous recording state
   if (recorder && recorder.state !== 'inactive') {
     recorder.stop();
@@ -38,15 +42,17 @@ async function startRecording(streamId: string) {
     stream = null;
   }
 
-  stream = await navigator.mediaDevices.getUserMedia({
+  // Use getDisplayMedia — Chrome shows a tab/screen picker dialog
+  stream = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
     audio: false,
-    video: {
-      // @ts-expect-error: chromeMediaSource is a Chrome-specific constraint
-      mandatory: {
-        chromeMediaSource: 'tab',
-        chromeMediaSourceId: streamId,
-      },
-    },
+  });
+
+  // Handle user clicking Chrome's "Stop sharing" button
+  stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
   });
 
   recorder = new MediaRecorder(stream, {
@@ -71,12 +77,23 @@ async function startRecording(streamId: string) {
 
     const recordingId = await storeRecording(blob);
 
+    // Convert to data URL for preview (skip if > 50MB)
+    let dataUrl: string | undefined;
+    if (blob.size < 50_000_000) {
+      dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+
     chrome.runtime.sendMessage({
       type: 'recording-complete',
       target: 'service-worker',
       recordingId,
       size: blob.size,
       mimeType: blob.type,
+      dataUrl,
     });
   };
 

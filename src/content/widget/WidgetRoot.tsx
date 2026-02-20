@@ -34,16 +34,23 @@ export function WidgetRoot() {
   const [changes, setChanges] = useState<CSSChange[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [recordingDataUrl, setRecordingDataUrl] = useState<string | null>(null);
+  const [recordingSize, setRecordingSize] = useState<number | null>(null);
   const [editNote, setEditNote] = useState('');
+  const [recordError, setRecordError] = useState<string | null>(null);
 
   // ── Port message handler ──
   const handlePortMessage = useCallback((msg: ExtensionMessage) => {
     if (msg.type === 'RECORDING_COMPLETE') {
       setRecordingId(msg.recordingId);
+      setRecordingDataUrl(msg.dataUrl ?? null);
+      setRecordingSize(msg.size ?? null);
       setIsRecording(false);
+      setActiveTab('changes');
     }
     if (msg.type === 'RECORDING_ERROR') {
       setIsRecording(false);
+      setRecordError(msg.error);
     }
   }, []);
 
@@ -112,6 +119,7 @@ export function WidgetRoot() {
   }, [captureFullPage]);
 
   const handleToolbarRecord = useCallback(async () => {
+    setRecordError(null);
     try {
       if (isRecording) {
         setIsRecording(false);
@@ -119,13 +127,17 @@ export function WidgetRoot() {
       } else {
         const response = await sendMessage({ type: 'START_RECORDING', tabId: 0 });
         if (response && 'error' in response) {
-          console.error('Recording failed:', (response as { error: string }).error);
+          const msg = (response as { error: string }).error;
+          console.error('Recording failed:', msg);
+          setRecordError(msg);
         } else {
           setIsRecording(true);
         }
       }
     } catch (err) {
-      console.error('Recording error:', err);
+      const msg = (err as Error).message || 'Recording failed';
+      console.error('Recording error:', msg);
+      setRecordError(msg);
       setIsRecording(false);
     }
   }, [isRecording, sendMessage]);
@@ -196,6 +208,8 @@ export function WidgetRoot() {
     setDescription('');
     setChanges([]);
     setRecordingId(null);
+    setRecordingDataUrl(null);
+    setRecordingSize(null);
     setShowPreview(false);
   }, []);
 
@@ -321,8 +335,20 @@ export function WidgetRoot() {
                   onUpdated={handleScreenshotUpdated}
                   onRemove={handleRemoveScreenshot}
                 />
-                {(recordingId || isRecording) && (
+                {(recordingId || isRecording || recordError) && (
                   <div style={{ marginTop: 12 }}>
+                    {recordError && (
+                      <div className="qa-status qa-status-error">
+                        <span style={{ flex: 1 }}>Recording error: {recordError}</span>
+                        <button
+                          className="qa-btn qa-btn-ghost"
+                          onClick={() => setRecordError(null)}
+                          style={{ padding: '0 4px', fontSize: 11 }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
                     {isRecording && (
                       <div className="qa-status qa-status-error">
                         <span className="qa-recording-dot" />
@@ -330,15 +356,38 @@ export function WidgetRoot() {
                       </div>
                     )}
                     {recordingId && !isRecording && (
-                      <div className="qa-status qa-status-success">
-                        <span style={{ flex: 1 }}>Screen recording attached</span>
-                        <button
-                          className="qa-btn qa-btn-ghost"
-                          onClick={() => setRecordingId(null)}
-                          style={{ padding: '0 4px', fontSize: 11 }}
-                        >
-                          Remove
-                        </button>
+                      <div className="qa-recording-card">
+                        <div className="qa-recording-header">
+                          <span style={{ flex: 1, fontWeight: 500 }}>
+                            Screen recording
+                            {recordingSize != null && (
+                              <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>
+                                {recordingSize < 1_000_000
+                                  ? `${Math.round(recordingSize / 1024)}KB`
+                                  : `${(recordingSize / 1_000_000).toFixed(1)}MB`}
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            className="qa-btn qa-btn-ghost"
+                            onClick={() => {
+                              setRecordingId(null);
+                              setRecordingDataUrl(null);
+                              setRecordingSize(null);
+                            }}
+                            style={{ padding: '0 4px', fontSize: 11 }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        {recordingDataUrl && (
+                          <video
+                            className="qa-recording-preview"
+                            src={recordingDataUrl}
+                            controls
+                            playsInline
+                          />
+                        )}
                       </div>
                     )}
                   </div>

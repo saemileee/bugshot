@@ -15,8 +15,9 @@ export type ExtensionMessage =
   | { type: 'START_RECORDING'; tabId: number }
   | { type: 'STOP_RECORDING' }
   | { type: 'RECORDING_STARTED' }
+  | { type: 'RECORDING_STOPPED' }
   | { type: 'RECORDING_ERROR'; error: string }
-  | { type: 'RECORDING_COMPLETE'; recordingId: string }
+  | { type: 'RECORDING_COMPLETE'; recordingId: string; dataUrl?: string; size?: number }
 
   // Jira Submission
   | { type: 'SUBMIT_TO_JIRA'; payload: JiraSubmissionPayload }

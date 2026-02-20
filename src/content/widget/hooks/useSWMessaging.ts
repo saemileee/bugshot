@@ -24,9 +24,13 @@ export function useSWMessaging(onPortMessage?: (msg: ExtensionMessage) => void) 
   }, []);
 
   const sendMessage = useCallback((message: ExtensionMessage): Promise<ExtensionMessage> => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
-        resolve(response as ExtensionMessage);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response as ExtensionMessage);
+        }
       });
     });
   }, []);

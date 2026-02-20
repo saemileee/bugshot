@@ -31,6 +31,8 @@ export function initializeMessagingHub() {
         port.postMessage({
           type: 'RECORDING_COMPLETE',
           recordingId: message.recordingId,
+          dataUrl: message.dataUrl,
+          size: message.size,
         });
       }
       return false;
@@ -40,8 +42,8 @@ export function initializeMessagingHub() {
     if (message.type === 'recording-error' && message.target === 'service-worker') {
       for (const [, port] of contentPorts) {
         port.postMessage({
-          type: 'RECORDING_COMPLETE',
-          recordingId: '__error__',
+          type: 'RECORDING_ERROR',
+          error: message.error || 'Recording failed',
         });
       }
       return false;
@@ -138,7 +140,13 @@ function handleContentPort(port: chrome.runtime.Port) {
       }
 
       case 'STOP_RECORDING': {
-        await stopRecording();
+        try {
+          await stopRecording();
+          port.postMessage({ type: 'RECORDING_STOPPED' });
+        } catch (error) {
+          console.error('Stop recording failed:', error);
+          port.postMessage({ type: 'RECORDING_ERROR', error: (error as Error).message });
+        }
         break;
       }
     }
@@ -219,7 +227,10 @@ function handleOneShotMessage(
 
     case 'STOP_RECORDING': {
       stopRecording().then(() => {
-        sendResponse({ type: 'RECORDING_STARTED' });
+        sendResponse({ type: 'RECORDING_STOPPED' });
+      }).catch((error) => {
+        console.error('Stop recording failed:', error);
+        sendResponse({ type: 'RECORDING_ERROR', error: (error as Error).message });
       });
       break;
     }

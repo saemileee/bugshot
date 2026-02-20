@@ -18,6 +18,7 @@ interface FloatingWidgetProps {
 
 const MIN_W = 360;
 const DEFAULT_W = 400;
+const PANEL_H = 600;
 
 export function FloatingWidget({
   activeTab,
@@ -37,26 +38,45 @@ export function FloatingWidget({
     left: Math.round((window.innerWidth - 300) / 2),
     bottom: 20,
   }));
+  // Panel: right side, draggable
+  const [panelPos, setPanelPos] = useState(() => ({
+    right: 12,
+    top: Math.max(12, Math.round((window.innerHeight - PANEL_H) / 2)),
+  }));
   const [panelW, setPanelW] = useState(DEFAULT_W);
-  const isDragging = useRef(false);
+  const [panelH, setPanelH] = useState(PANEL_H);
+  const isDragging = useRef<'bar' | 'panel' | false>(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const isPanelOpen = activeTab !== null;
 
   // ── Toolbar drag ──
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.qa-bar-btn')) return;
-    isDragging.current = true;
+    isDragging.current = 'bar';
     dragOffset.current = { x: e.clientX - barPos.left, y: e.clientY + barPos.bottom };
     e.preventDefault();
   }, [barPos]);
 
+  // ── Panel drag ──
+  const handlePanelDragDown = useCallback((e: React.MouseEvent) => {
+    isDragging.current = 'panel';
+    dragOffset.current = { x: e.clientX + panelPos.right, y: e.clientY - panelPos.top };
+    e.preventDefault();
+  }, [panelPos]);
+
   useEffect(() => {
     const move = (e: MouseEvent) => {
-      if (!isDragging.current) return;
-      setBarPos({
-        left: Math.max(0, Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x)),
-        bottom: Math.max(0, Math.min(window.innerHeight - 44, dragOffset.current.y - e.clientY)),
-      });
+      if (isDragging.current === 'bar') {
+        setBarPos({
+          left: Math.max(0, Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x)),
+          bottom: Math.max(0, Math.min(window.innerHeight - 44, dragOffset.current.y - e.clientY)),
+        });
+      } else if (isDragging.current === 'panel') {
+        setPanelPos({
+          right: Math.max(0, Math.min(window.innerWidth - MIN_W, dragOffset.current.x - e.clientX)),
+          top: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.current.y)),
+        });
+      }
     };
     const up = () => { isDragging.current = false; };
     document.addEventListener('mousemove', move);
@@ -67,16 +87,18 @@ export function FloatingWidget({
     };
   }, []);
 
-  // ── Panel resize (left edge handle — width only) ──
+  // ── Panel resize (bottom-left corner) ──
   const handleResizeDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
+    const startY = e.clientY;
     const startW = panelW;
+    const startH = panelH;
 
     const move = (ev: MouseEvent) => {
-      const dw = startX - ev.clientX;
-      setPanelW(Math.max(MIN_W, Math.min(700, startW + dw)));
+      setPanelW(Math.max(MIN_W, Math.min(700, startW + (startX - ev.clientX))));
+      setPanelH(Math.max(300, Math.min(window.innerHeight - 40, startH + (ev.clientY - startY))));
     };
     const up = () => {
       document.removeEventListener('mousemove', move);
@@ -84,7 +106,7 @@ export function FloatingWidget({
     };
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', up);
-  }, [panelW]);
+  }, [panelW, panelH]);
 
   const handleTabClick = useCallback((tab: ToolbarTab) => {
     onTabChange(activeTab === tab ? null : tab);
@@ -92,13 +114,24 @@ export function FloatingWidget({
 
   return (
     <>
-      {/* ── Y-axis Panel (right side drawer) ── */}
+      {/* ── Y-axis Panel (draggable) ── */}
       {isPanelOpen && (
         <div
           className="qa-panel qa-slide-in"
-          style={{ width: panelW }}
+          style={{
+            right: panelPos.right,
+            top: panelPos.top,
+            width: panelW,
+            height: panelH,
+          }}
         >
-          <div className="qa-resize-handle" onMouseDown={handleResizeDown} />
+          {/* Drag handle */}
+          <div className="qa-panel-drag" onMouseDown={handlePanelDragDown}>
+            <svg width="24" height="4" viewBox="0 0 24 4" fill="currentColor" opacity="0.3">
+              <rect x="0" y="0" width="24" height="1.5" rx="1" />
+              <rect x="0" y="3" width="24" height="1.5" rx="1" />
+            </svg>
+          </div>
 
           <div className="qa-panel-scroll">
             {children}
@@ -109,6 +142,9 @@ export function FloatingWidget({
               {footer}
             </div>
           )}
+
+          {/* Resize handle (bottom-left) */}
+          <div className="qa-resize-handle" onMouseDown={handleResizeDown} />
         </div>
       )}
 
