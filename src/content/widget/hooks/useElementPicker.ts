@@ -128,6 +128,46 @@ export function useElementPicker() {
     };
   }, [isPicking]);
 
+  // ── Persistent highlight on picked element ──
+  useEffect(() => {
+    if (!pickedElement) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'design-qa-picked-highlight';
+    overlay.style.cssText = [
+      'position:fixed',
+      'z-index:2147483645',
+      'pointer-events:none',
+      'border:2px solid #3b82f6',
+      'background:rgba(59,130,246,0.06)',
+      'border-radius:3px',
+      'box-shadow:0 0 0 4px rgba(59,130,246,0.12)',
+      'transition:top .15s,left .15s,width .15s,height .15s',
+    ].join(';');
+    document.documentElement.appendChild(overlay);
+
+    const update = () => {
+      const rect = pickedElement.getBoundingClientRect();
+      overlay.style.top = rect.top + 'px';
+      overlay.style.left = rect.left + 'px';
+      overlay.style.width = rect.width + 'px';
+      overlay.style.height = rect.height + 'px';
+    };
+    update();
+
+    // Track scroll / resize
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    const raf = setInterval(update, 500); // fallback for layout shifts
+
+    return () => {
+      overlay.remove();
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+      clearInterval(raf);
+    };
+  }, [pickedElement]);
+
   const startPicking = useCallback(() => {
     setPickedElement(null);
     setIsPicking(true);

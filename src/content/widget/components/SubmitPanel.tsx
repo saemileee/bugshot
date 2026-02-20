@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
 import type { ScreenshotData } from '../WidgetRoot';
@@ -16,6 +16,89 @@ interface SubmitPanelProps {
 }
 
 const SPECIAL_PROPS = new Set(['className', 'textContent']);
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function generateHtml(
+  summary: string,
+  changes: CSSChange[],
+  description: string,
+  screenshotCount: number,
+): string {
+  const h: string[] = [];
+  h.push(`<h2 style="margin:0 0 8px">${esc(summary)}</h2>`);
+
+  if (changes.length > 0) {
+    h.push(`<h3 style="margin:12px 0 6px">CSS Changes (${changes.length})</h3>`);
+    for (const c of changes) {
+      h.push(`<p style="margin:8px 0 4px"><strong><code style="background:#f1f5f9;padding:1px 4px;border-radius:3px">${esc(c.selector)}</code></strong></p>`);
+
+      if (c.description) h.push(`<blockquote style="margin:4px 0;padding:4px 10px;border-left:3px solid #cbd5e1;color:#475569">${esc(c.description)}</blockquote>`);
+
+      if (c.screenshotBefore || c.screenshotAfter) {
+        const parts: string[] = [];
+        if (c.screenshotBefore) parts.push('As-Is');
+        if (c.screenshotAfter) parts.push('To-Be');
+        h.push(`<p style="font-size:11px;color:#64748b;margin:4px 0">📎 ${parts.join(' / ')} screenshot attached</p>`);
+      }
+
+      const meta = c.properties.filter((p) => SPECIAL_PROPS.has(p.property));
+      const styles = c.properties.filter((p) => !SPECIAL_PROPS.has(p.property));
+
+      for (const m of meta) {
+        h.push(`<p style="margin:2px 0"><strong>${esc(m.property)}:</strong> <del style="color:#ef4444">${esc(m.asIs)}</del> → <span style="color:#16a34a">${esc(m.toBe)}</span></p>`);
+      }
+
+      if (styles.length > 0) {
+        h.push('<table style="border-collapse:collapse;width:100%;font-size:12px;margin:6px 0"><thead><tr>');
+        h.push('<th style="border:1px solid #e2e8f0;padding:4px 8px;background:#f8fafc;text-align:left">Property</th>');
+        h.push('<th style="border:1px solid #e2e8f0;padding:4px 8px;background:#f8fafc;text-align:left">As-Is</th>');
+        h.push('<th style="border:1px solid #e2e8f0;padding:4px 8px;background:#f8fafc;text-align:left">To-Be</th>');
+        h.push('</tr></thead><tbody>');
+        for (const s of styles) {
+          h.push(`<tr><td style="border:1px solid #e2e8f0;padding:4px 8px"><code>${esc(s.property)}</code></td>`);
+          h.push(`<td style="border:1px solid #e2e8f0;padding:4px 8px;color:#ef4444;text-decoration:line-through">${esc(s.asIs)}</td>`);
+          h.push(`<td style="border:1px solid #e2e8f0;padding:4px 8px;color:#16a34a;font-weight:500">${esc(s.toBe)}</td></tr>`);
+        }
+        h.push('</tbody></table>');
+      }
+    }
+  }
+
+  if (screenshotCount > 0) {
+    h.push(`<p style="font-size:12px;color:#64748b;margin:8px 0">📎 ${screenshotCount} screenshot(s) attached</p>`);
+  }
+
+  if (description.trim()) {
+    h.push(`<h3 style="margin:12px 0 6px">Notes</h3><p style="margin:0;white-space:pre-wrap">${esc(description)}</p>`);
+  }
+
+  h.push(`<hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0"><p style="font-size:11px;color:#94a3b8;margin:0">Page: <a href="${esc(window.location.href)}" style="color:#3b82f6">${esc(window.location.pathname)}</a> · ${new Date().toLocaleString()}</p>`);
+  return h.join('');
+}
+
+function generatePlainText(
+  summary: string,
+  changes: CSSChange[],
+  description: string,
+): string {
+  const lines: string[] = [summary, ''];
+
+  for (const c of changes) {
+    lines.push(`[${c.selector}]`);
+    if (c.description) lines.push(`  ${c.description}`);
+    for (const p of c.properties) {
+      lines.push(`  ${p.property}: ${p.asIs} → ${p.toBe}`);
+    }
+    lines.push('');
+  }
+
+  if (description.trim()) lines.push('Notes:', description, '');
+  lines.push(window.location.href);
+  return lines.join('\n');
+}
 
 function generatePreviewSummary(changes: CSSChange[]): string {
   const title = document.title || window.location.pathname;
@@ -39,6 +122,26 @@ export function SubmitPanel({
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const summary = generatePreviewSummary(changes);
+    const html = generateHtml(summary, changes, description, screenshots.length);
+    const plain = generatePlainText(summary, changes, description);
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ]);
+    } catch {
+      await navigator.clipboard.writeText(plain);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [changes, description, screenshots.length]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -98,11 +201,19 @@ export function SubmitPanel({
     <div>
       <div className="flex items-center justify-between mb-4" style={{ padding: '0 16px', paddingTop: 12 }}>
         <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Ticket Preview</h3>
-        {onBack && (
-          <button className="qa-btn qa-btn-ghost" onClick={onBack}>
-            Back
+        <div className="flex items-center gap-1">
+          <button
+            className={`qa-btn ${copied ? 'qa-btn-success' : 'qa-btn-ghost'}`}
+            onClick={handleCopy}
+          >
+            {copied ? 'Copied!' : 'Copy'}
           </button>
-        )}
+          {onBack && (
+            <button className="qa-btn qa-btn-ghost" onClick={onBack}>
+              Back
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: '0 16px' }}>
