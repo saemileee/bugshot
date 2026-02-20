@@ -16,6 +16,14 @@ import { generateSummary, buildFullDescription, buildWikiMarkupDescription } fro
 import { dataUrlToBlob } from '@/shared/utils/screenshot-utils';
 import type { EpicConfig } from '@/shared/types/jira-ticket';
 import type { ChangeSet } from '@/shared/types/css-change';
+import {
+  submitToAll,
+  verifyIntegration,
+  saveIntegrationConfig,
+  checkIntegrationStatus,
+  disconnectIntegration,
+  getAllIntegrationStatuses,
+} from '../integrations/registry';
 
 // Port registries keyed by tabId
 const devtoolsPorts = new Map<number, chrome.runtime.Port>();
@@ -133,6 +141,19 @@ function handleContentPort(port: chrome.runtime.Port) {
             type: 'JIRA_SUBMIT_RESULT',
             success: false,
             error: (error as Error).message,
+          });
+        }
+        break;
+      }
+
+      case 'SUBMIT_TO_INTEGRATIONS': {
+        try {
+          const results = await submitToAll(message.payload);
+          port.postMessage({ type: 'INTEGRATION_RESULTS', results });
+        } catch (error) {
+          port.postMessage({
+            type: 'INTEGRATION_RESULTS',
+            results: [{ integrationId: 'jira', success: false, error: (error as Error).message }],
           });
         }
         break;
@@ -266,6 +287,74 @@ function handleOneShotMessage(
       break;
     }
 
+    case 'SUBMIT_TO_INTEGRATIONS': {
+      submitToAll(message.payload).then((results) => {
+        sendResponse({ type: 'INTEGRATION_RESULTS', results });
+      }).catch((error) => {
+        sendResponse({
+          type: 'INTEGRATION_RESULTS',
+          results: [{ integrationId: 'jira', success: false, error: (error as Error).message }],
+        });
+      });
+      break;
+    }
+
+    // ── Integration config messages ──
+
+    case 'SAVE_INTEGRATION_CONFIG': {
+      const cfg = {
+        id: message.integrationId,
+        enabled: true,
+        credentials: message.credentials,
+        settings: message.settings,
+      };
+      verifyIntegration(cfg).then(async (result) => {
+        if (result.success) {
+          await saveIntegrationConfig(cfg);
+          sendResponse({
+            type: 'INTEGRATION_CONFIG_RESULT',
+            integrationId: message.integrationId,
+            success: true,
+            displayName: result.displayName,
+          });
+        } else {
+          sendResponse({
+            type: 'INTEGRATION_CONFIG_RESULT',
+            integrationId: message.integrationId,
+            success: false,
+            error: result.error,
+          });
+        }
+      });
+      break;
+    }
+
+    case 'CHECK_INTEGRATION_STATUS': {
+      checkIntegrationStatus(message.integrationId).then((status) => {
+        sendResponse({
+          type: 'INTEGRATION_STATUS',
+          integrationId: message.integrationId,
+          connected: status.connected,
+          displayName: status.displayName,
+        });
+      });
+      break;
+    }
+
+    case 'DISCONNECT_INTEGRATION': {
+      disconnectIntegration(message.integrationId).then(() => {
+        sendResponse({ success: true });
+      });
+      break;
+    }
+
+    case 'GET_ALL_INTEGRATIONS': {
+      getAllIntegrationStatuses().then((integrations) => {
+        sendResponse({ type: 'ALL_INTEGRATIONS_STATUS', integrations });
+      });
+      break;
+    }
+
     case 'START_RECORDING': {
       const resolvedTabId = message.tabId || _sender.tab?.id || 0;
       startRecording(resolvedTabId).then(() => {
@@ -372,14 +461,12 @@ async function handleJiraSubmission(
   }
 
   // Phase 3: Update description with wiki markup (v2 API) for inline images
-  // Wiki markup `!filename.png|thumbnail!` renders attached images inline by filename.
   if (uploadedCount > 0) {
     try {
       const wikiDescription = buildWikiMarkupDescription(changeSet, allFilenames);
       await updateIssueDescriptionWiki(issue.key, wikiDescription);
       console.log('[Jira] Description updated with wiki markup (inline images)');
     } catch (err) {
-      // Phase 1 ADF description is still present as fallback
       console.warn('[Jira] Wiki description update failed:', err);
     }
   }

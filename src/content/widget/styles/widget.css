@@ -1294,6 +1294,114 @@ select.qa-settings-input {
   min-width: 0;
 }
 
+/* ── Integration accordion cards ── */
+.qa-integrations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-integration-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.qa-integration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.qa-integration-header:hover {
+  background: #f1f5f9;
+}
+
+.qa-integration-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qa-integration-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.qa-integration-badge-ok {
+  font-size: 10px;
+  font-weight: 500;
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid #bbf7d0;
+}
+
+.qa-integration-body {
+  padding: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ── Integration result cards (submit panel) ── */
+.qa-integration-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.qa-integration-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.qa-integration-result-ok {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.qa-integration-result-fail {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.qa-integration-result-icon {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.qa-integration-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qa-integration-result-link {
+  font-size: 11px;
+  color: #0369a1;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.qa-integration-result-link:hover {
+  text-decoration: underline;
+}
+
 /* ── Animations ── */
 .qa-slide-in {
   animation: qa-slideIn 0.2s ease-out;

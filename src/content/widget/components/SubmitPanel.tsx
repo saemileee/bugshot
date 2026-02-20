@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
+import type { IntegrationResult, SubmissionPayload, IntegrationId } from '@/shared/types/integration';
 import type { ScreenshotData } from '../WidgetRoot';
 import { TICKET_PREFIX } from '@/shared/constants';
 
@@ -41,7 +42,7 @@ function generateHtml(
         const parts: string[] = [];
         if (c.screenshotBefore) parts.push('As-Is');
         if (c.screenshotAfter) parts.push('To-Be');
-        h.push(`<p style="font-size:11px;color:#64748b;margin:4px 0">📎 ${parts.join(' / ')} screenshot attached</p>`);
+        h.push(`<p style="font-size:11px;color:#64748b;margin:4px 0">${parts.join(' / ')} screenshot attached</p>`);
       }
 
       const meta = c.properties.filter((p) => SPECIAL_PROPS.has(p.property));
@@ -68,7 +69,7 @@ function generateHtml(
   }
 
   if (screenshotCount > 0) {
-    h.push(`<p style="font-size:12px;color:#64748b;margin:8px 0">📎 ${screenshotCount} screenshot(s) attached</p>`);
+    h.push(`<p style="font-size:12px;color:#64748b;margin:8px 0">${screenshotCount} screenshot(s) attached</p>`);
   }
 
   if (description.trim()) {
@@ -110,6 +111,12 @@ function generatePreviewSummary(changes: CSSChange[]): string {
   return `${TICKET_PREFIX} ${title} - ${changes.length} CSS changes`;
 }
 
+const INTEGRATION_LABELS: Record<IntegrationId, string> = {
+  jira: 'Jira',
+  github: 'GitHub',
+  n8n: 'N8N',
+};
+
 export function SubmitPanel({
   screenshots,
   description,
@@ -121,16 +128,29 @@ export function SubmitPanel({
   isPreview,
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
+  const [results, setResults] = useState<IntegrationResult[] | null>(null);
+  const [legacyResult, setLegacyResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [editSummary, setEditSummary] = useState(() => generatePreviewSummary(changes));
   const [siteUrl, setSiteUrl] = useState('');
+  const [enabledCount, setEnabledCount] = useState(0);
+  const [enabledIntegrations, setEnabledIntegrations] = useState<IntegrationId[]>([]);
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' }, (r) => {
       if (r?.siteUrl) setSiteUrl(r.siteUrl);
     });
+    // Ask background for enabled integrations (handles legacy Jira migration)
+    chrome.runtime.sendMessage({ type: 'GET_ALL_INTEGRATIONS' }, (r) => {
+      if (r?.integrations) {
+        const enabled = (r.integrations as Array<{ id: IntegrationId; enabled: boolean }>).filter((i) => i.enabled);
+        setEnabledCount(enabled.length);
+        setEnabledIntegrations(enabled.map((i) => i.id));
+      }
+    });
   }, []);
+
+  const useMultiIntegration = enabledCount > 0;
 
   const handleCopy = useCallback(async () => {
     const html = generateHtml(editSummary, changes, description, screenshots.length);
@@ -152,9 +172,10 @@ export function SubmitPanel({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    setResult(null);
+    setResults(null);
+    setLegacyResult(null);
 
-    // Collect all screenshots: manual + per-change as-is/to-be
+    // Collect all screenshots
     const allScreenshots: Array<{ dataUrl: string; filename: string }> = screenshots.map((ss) => ({
       dataUrl: ss.annotated || ss.original,
       filename: ss.filename,
@@ -162,50 +183,72 @@ export function SubmitPanel({
 
     for (const c of changes) {
       const safeSel = c.selector.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
-      if (c.screenshotBefore) {
-        allScreenshots.push({ dataUrl: c.screenshotBefore, filename: `${safeSel}-as-is.png` });
-      }
-      if (c.screenshotAfter) {
-        allScreenshots.push({ dataUrl: c.screenshotAfter, filename: `${safeSel}-to-be.png` });
-      }
+      if (c.screenshotBefore) allScreenshots.push({ dataUrl: c.screenshotBefore, filename: `${safeSel}-as-is.png` });
+      if (c.screenshotAfter) allScreenshots.push({ dataUrl: c.screenshotAfter, filename: `${safeSel}-to-be.png` });
     }
 
-    const payload: JiraSubmissionPayload = {
-      changes,
-      summary: editSummary,
-      manualNotes: description,
-      screenshots: allScreenshots,
-      videoRecordingId: videoRecordingId || undefined,
-      pageUrl: window.location.href,
-      pageTitle: document.title,
-    };
+    if (useMultiIntegration) {
+      // Multi-integration path
+      const payload: SubmissionPayload = {
+        changes,
+        summary: editSummary,
+        manualNotes: description,
+        screenshots: allScreenshots,
+        videoRecordingId: videoRecordingId || undefined,
+        pageUrl: window.location.href,
+        pageTitle: document.title,
+      };
 
-    try {
-      const response = await sendMessage({ type: 'SUBMIT_TO_JIRA', payload });
-
-      if (response.type === 'JIRA_SUBMIT_RESULT') {
-        setResult({
-          success: response.success,
-          issueKey: response.issueKey,
-          error: response.error,
-        });
-
-        if (response.success) {
-          setTimeout(onSuccess, 3000);
+      try {
+        const response = await sendMessage({ type: 'SUBMIT_TO_INTEGRATIONS', payload });
+        if (response.type === 'INTEGRATION_RESULTS') {
+          const r = (response as any).results as IntegrationResult[];
+          setResults(r);
+          if (r.every((res) => res.success)) {
+            setTimeout(onSuccess, 3000);
+          }
         }
+      } catch (err) {
+        setResults([{ integrationId: 'jira', success: false, error: (err as Error).message }]);
+      } finally {
+        setIsSubmitting(false);
       }
-    } catch (err) {
-      setResult({ success: false, error: (err as Error).message });
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      // Legacy Jira-only path
+      const payload: JiraSubmissionPayload = {
+        changes,
+        summary: editSummary,
+        manualNotes: description,
+        screenshots: allScreenshots,
+        videoRecordingId: videoRecordingId || undefined,
+        pageUrl: window.location.href,
+        pageTitle: document.title,
+      };
+
+      try {
+        const response = await sendMessage({ type: 'SUBMIT_TO_JIRA', payload });
+        if (response.type === 'JIRA_SUBMIT_RESULT') {
+          setLegacyResult({ success: response.success, issueKey: response.issueKey, error: response.error });
+          if (response.success) setTimeout(onSuccess, 3000);
+        }
+      } catch (err) {
+        setLegacyResult({ success: false, error: (err as Error).message });
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   if (!isPreview) return null;
 
-  const issueUrl = siteUrl && result?.issueKey
-    ? `https://${siteUrl}/browse/${result.issueKey}`
-    : null;
+  const allSuccess = results?.every((r) => r.success) ?? false;
+  const legacyIssueUrl = siteUrl && legacyResult?.issueKey ? `https://${siteUrl}/browse/${legacyResult.issueKey}` : null;
+
+  const submitLabel = useMultiIntegration
+    ? (enabledCount === 1
+      ? `Submit to ${INTEGRATION_LABELS[enabledIntegrations[0]]}`
+      : `Submit to ${enabledCount} Integrations`)
+    : 'Create Jira Issue';
 
   return (
     <div>
@@ -346,38 +389,56 @@ export function SubmitPanel({
           </div>
         </div>
 
-        {/* Result */}
-        {result && (
-          <div className={`qa-status ${result.success ? 'qa-status-success' : 'qa-status-error'}`} style={{ marginBottom: 12 }}>
-            {result.success ? (
+        {/* Multi-integration results */}
+        {results && (
+          <div className="qa-integration-results">
+            {results.map((r) => (
+              <div key={r.integrationId} className={`qa-integration-result ${r.success ? 'qa-integration-result-ok' : 'qa-integration-result-fail'}`}>
+                <span className="qa-integration-result-icon">{r.success ? '✓' : '✗'}</span>
+                <div className="qa-integration-result-body">
+                  <span>
+                    <strong>{INTEGRATION_LABELS[r.integrationId]}</strong>
+                    {r.issueKey && `: ${r.issueKey}`}
+                    {!r.success && r.error && `: ${r.error}`}
+                  </span>
+                  {r.url && r.success && (
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="qa-integration-result-link">
+                      {r.url}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Legacy Jira result */}
+        {legacyResult && (
+          <div className={`qa-status ${legacyResult.success ? 'qa-status-success' : 'qa-status-error'}`} style={{ marginBottom: 12 }}>
+            {legacyResult.success ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span>Created <strong>{result.issueKey}</strong></span>
-                {issueUrl && (
-                  <a
-                    href={issueUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: '#0369a1', fontSize: 12, wordBreak: 'break-all' }}
-                  >
-                    {issueUrl}
+                <span>Created <strong>{legacyResult.issueKey}</strong></span>
+                {legacyIssueUrl && (
+                  <a href={legacyIssueUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontSize: 12, wordBreak: 'break-all' }}>
+                    {legacyIssueUrl}
                   </a>
                 )}
               </div>
             ) : (
-              <span>Failed: {result.error}</span>
+              <span>Failed: {legacyResult.error}</span>
             )}
           </div>
         )}
 
-        {/* Submit */}
-        {!result?.success && (
+        {/* Submit button */}
+        {!allSuccess && !legacyResult?.success && (
           <button
             className="qa-btn qa-btn-success qa-btn-block qa-btn-lg"
             onClick={handleSubmit}
             disabled={isSubmitting || !editSummary.trim()}
             style={{ marginBottom: 16 }}
           >
-            {isSubmitting ? 'Submitting to Jira...' : 'Create Jira Issue'}
+            {isSubmitting ? 'Submitting...' : submitLabel}
           </button>
         )}
       </div>

@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   TRACKED_PROPERTIES: 'trackedProperties',
   RECENT_SUBMISSIONS: 'recentSubmissions',
   BATCH_CHANGES: 'batchChanges',
+  INTEGRATIONS: 'integrations',
 } as const;
 
 // Default CSS properties to track (design-relevant)
