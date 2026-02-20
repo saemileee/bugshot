@@ -1,0 +1,394 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.panel-container {
+  @apply font-sans text-sm bg-white text-gray-900 h-screen flex flex-col;
+}
+
+.panel-header {
+  @apply border-b border-gray-200 px-4 py-2;
+}
+
+.panel-header h1 {
+  @apply text-base font-semibold mb-2;
+}
+
+.tab-bar {
+  @apply flex gap-1;
+}
+
+.tab {
+  @apply px-3 py-1 rounded-t text-xs font-medium border border-b-0 border-gray-200 bg-gray-50 text-gray-600 cursor-pointer;
+}
+
+.tab.active {
+  @apply bg-white text-blue-600 border-blue-200;
+}
+
+.panel-main {
+  @apply flex-1 overflow-y-auto p-4;
+}
+
+/* Toast notification */
+.panel-toast {
+  @apply px-4 py-2 text-xs font-medium;
+}
+
+.toast-success {
+  @apply bg-green-50 text-green-700 border-b border-green-200;
+}
+
+.toast-error {
+  @apply bg-red-50 text-red-700 border-b border-red-200;
+}
+
+/* Capture flow */
+.capture-flow {
+  @apply flex items-center gap-2 mb-3 flex-wrap;
+}
+
+.capture-step {
+  @apply flex items-center gap-1.5;
+}
+
+.step-number {
+  @apply w-5 h-5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-xs font-bold flex-shrink-0;
+}
+
+.step-number.step-done {
+  @apply bg-green-500 text-white;
+}
+
+.step-number.step-mid {
+  @apply bg-gray-100 text-gray-400;
+}
+
+.step-content {
+  @apply flex items-center gap-1.5;
+}
+
+.step-hint {
+  @apply text-xs text-gray-400 hidden;
+}
+
+@media (min-width: 500px) {
+  .step-hint { display: inline; }
+}
+
+.capture-step-arrow {
+  @apply text-gray-300 text-sm;
+}
+
+/* Status feedback bar */
+.status-bar {
+  @apply px-3 py-2 rounded-lg text-xs mb-3 relative;
+}
+
+.status-bar code {
+  @apply bg-white/50 px-1 py-0.5 rounded font-mono;
+}
+
+.status-info {
+  @apply bg-blue-50 text-blue-700 border border-blue-200;
+}
+
+.status-error {
+  @apply bg-red-50 text-red-700 border border-red-200;
+}
+
+.status-warn {
+  @apply bg-amber-50 text-amber-700 border border-amber-200;
+}
+
+.status-success {
+  @apply bg-green-50 text-green-700 border border-green-200;
+}
+
+.status-dismiss {
+  @apply absolute top-1 right-2 text-current opacity-50 hover:opacity-100 cursor-pointer text-sm;
+  background: none;
+  border: none;
+}
+
+.batch-toggle {
+  @apply flex items-center gap-1.5 text-xs ml-auto cursor-pointer;
+}
+
+/* Buttons */
+.btn {
+  @apply px-3 py-1.5 rounded text-xs font-medium cursor-pointer border-0;
+}
+
+.btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.btn-sm {
+  @apply px-2 py-1 text-xs;
+}
+
+.btn-block {
+  @apply w-full;
+}
+
+.btn-primary {
+  @apply bg-blue-500 text-white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  @apply bg-blue-600;
+}
+
+.btn-success {
+  @apply bg-green-500 text-white;
+}
+
+.btn-success:hover:not(:disabled) {
+  @apply bg-green-600;
+}
+
+.btn-danger {
+  @apply bg-red-500 text-white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  @apply bg-red-600;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 border border-gray-300;
+}
+
+.btn-text-danger {
+  @apply text-red-500 bg-transparent text-xs cursor-pointer;
+  border: none;
+}
+
+.btn-text-danger:hover {
+  @apply text-red-700 underline;
+}
+
+/* Empty state */
+.empty-state {
+  @apply text-center py-8 text-gray-400;
+}
+
+.empty-state p {
+  @apply mb-3;
+}
+
+.hint-steps {
+  @apply text-left text-xs text-gray-500 space-y-1 pl-5;
+  list-style: decimal;
+}
+
+.hint-steps li {
+  @apply leading-relaxed;
+}
+
+/* Change list */
+.change-list-header {
+  @apply flex items-center justify-between mb-3 text-xs text-gray-500;
+}
+
+.change-item {
+  @apply border border-gray-200 rounded-lg mb-3 overflow-hidden;
+}
+
+.change-item-header {
+  @apply flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200;
+}
+
+.change-selector {
+  @apply text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono truncate;
+  max-width: 200px;
+}
+
+.change-item-actions {
+  @apply flex items-center gap-1;
+}
+
+.btn-remove {
+  @apply w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer text-sm;
+  background: none;
+  border: none;
+}
+
+.change-item-meta {
+  @apply px-3 py-1 text-xs text-gray-400 bg-gray-50 border-t border-gray-100;
+}
+
+/* Change table */
+.change-table {
+  @apply w-full text-xs;
+  border-collapse: collapse;
+}
+
+.change-table th {
+  @apply text-left px-3 py-1.5 text-gray-500 font-medium bg-gray-50;
+}
+
+.change-table td {
+  @apply px-3 py-1.5 border-t border-gray-100;
+}
+
+.change-table code {
+  @apply bg-gray-100 px-1 py-0.5 rounded font-mono text-xs;
+}
+
+.change-table .as-is {
+  @apply text-red-500;
+}
+
+.change-table .to-be {
+  @apply text-green-600 font-medium;
+}
+
+.btn-inline-remove {
+  @apply text-gray-300 hover:text-red-500 cursor-pointer text-sm;
+  background: none;
+  border: none;
+}
+
+/* Design token styles */
+.token-section-label {
+  @apply text-xs font-medium text-purple-600 px-3 py-1 bg-purple-50 border-t border-purple-100;
+}
+
+.token-row {
+  @apply bg-purple-50/30;
+}
+
+.token-name {
+  @apply bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-mono text-xs;
+}
+
+.token-badge {
+  @apply ml-1 text-purple-500 bg-purple-50 border border-purple-200 px-1 py-0 rounded text-xs;
+  font-size: 9px;
+}
+
+/* Meta changes (className, textContent) */
+.meta-changes {
+  @apply px-3 py-2 bg-blue-50 border-b border-blue-100;
+}
+
+.meta-change-row {
+  @apply flex items-center gap-2 text-xs py-0.5;
+}
+
+.meta-label {
+  @apply font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-xs;
+  min-width: 80px;
+}
+
+.meta-value {
+  @apply font-mono text-xs px-1.5 py-0.5 rounded;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-value.as-is {
+  @apply bg-red-50 text-red-600;
+}
+
+.meta-value.to-be {
+  @apply bg-green-50 text-green-600;
+}
+
+.meta-arrow {
+  @apply text-gray-400 text-xs flex-shrink-0;
+}
+
+/* Batch preview */
+.batch-preview {
+  @apply space-y-3;
+}
+
+.batch-header {
+  @apply flex items-center justify-between;
+}
+
+.batch-count {
+  @apply text-xs font-medium text-gray-600 bg-amber-50 text-amber-700 px-2 py-1 rounded;
+}
+
+.batch-groups {
+  @apply space-y-2;
+}
+
+.batch-group {
+  @apply border border-gray-200 rounded-lg overflow-hidden;
+}
+
+.batch-group-header {
+  @apply flex items-center gap-2 px-3 py-2 bg-gray-50 cursor-pointer text-xs hover:bg-gray-100;
+}
+
+.batch-group-toggle {
+  @apply text-gray-400 text-xs;
+}
+
+.batch-group-selector {
+  @apply font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded truncate;
+  max-width: 250px;
+}
+
+.batch-group-count {
+  @apply text-gray-400 ml-auto;
+}
+
+.batch-group-body {
+  @apply px-3 py-2;
+}
+
+.batch-change {
+  @apply mb-2 last:mb-0;
+}
+
+.batch-notes label {
+  @apply block text-xs font-medium text-gray-600 mb-1;
+}
+
+.batch-notes textarea {
+  @apply w-full px-3 py-2 text-xs border border-gray-300 rounded resize-y outline-none;
+  min-height: 60px;
+}
+
+.batch-notes textarea:focus {
+  @apply border-blue-400 ring-2 ring-blue-100;
+}
+
+.batch-empty {
+  @apply text-center py-8 text-gray-400 text-xs;
+}
+
+/* Settings */
+.settings-panel {
+  @apply p-4;
+}
+
+.settings-panel h2 {
+  @apply text-sm font-semibold mb-3;
+}
+
+.form-group {
+  @apply mb-3;
+}
+
+.form-group label {
+  @apply block text-xs font-medium text-gray-600 mb-1;
+}
+
+.form-group input,
+.form-group select {
+  @apply w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  @apply border-blue-400 ring-2 ring-blue-100;
+}
