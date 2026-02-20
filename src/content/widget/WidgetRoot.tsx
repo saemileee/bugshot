@@ -11,6 +11,7 @@ import { useElementPicker } from './hooks/useElementPicker';
 import { useContentCSSTracking } from './hooks/useContentCSSTracking';
 import { useScreenshot } from './hooks/useScreenshot';
 import type { CSSChange } from '@/shared/types/css-change';
+import type { ExtensionMessage } from '@/shared/types/messages';
 
 export type WidgetTab = 'capture' | 'describe' | 'changes' | 'submit';
 
@@ -26,10 +27,22 @@ export function WidgetRoot() {
   const [description, setDescription] = useState('');
   const [changes, setChanges] = useState<CSSChange[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  const { port, sendMessage } = useSWMessaging();
+  // Port message handler — receives async messages from service worker
+  const handlePortMessage = useCallback((msg: ExtensionMessage) => {
+    if (msg.type === 'RECORDING_COMPLETE') {
+      setRecordingId(msg.recordingId);
+      setIsRecording(false);
+    }
+    if (msg.type === 'RECORDING_ERROR') {
+      setIsRecording(false);
+    }
+  }, []);
+
+  const { port, sendMessage } = useSWMessaging(handlePortMessage);
   const picker = useElementPicker();
   const tracking = useContentCSSTracking();
   const { captureElement } = useScreenshot(port);
@@ -38,7 +51,7 @@ export function WidgetRoot() {
   const [editNote, setEditNote] = useState('');
 
   const isEditing = tracking.status.state === 'before_captured';
-  const hasContent = screenshots.length > 0 || description.trim() || changes.length > 0;
+  const hasContent = screenshots.length > 0 || description.trim() || changes.length > 0 || !!recordingId;
 
   // Picker -> panel management
   useEffect(() => {
@@ -145,6 +158,7 @@ export function WidgetRoot() {
     setScreenshots([]);
     setDescription('');
     setChanges([]);
+    setRecordingId(null);
     setShowPreview(false);
   }, []);
 
@@ -206,6 +220,7 @@ export function WidgetRoot() {
           sendMessage={sendMessage}
           onSuccess={handleSubmitSuccess}
           onBack={() => setShowPreview(false)}
+          videoRecordingId={recordingId}
           isPreview
         />
       </FloatingWidget>
@@ -284,6 +299,8 @@ export function WidgetRoot() {
                 isRecording={isRecording}
                 onRecordingChange={setIsRecording}
                 sendMessage={sendMessage}
+                recordingId={recordingId}
+                onRemoveRecording={() => setRecordingId(null)}
               />
             </div>
           </section>

@@ -14,6 +14,8 @@ export type ExtensionMessage =
   // Video Recording
   | { type: 'START_RECORDING'; tabId: number }
   | { type: 'STOP_RECORDING' }
+  | { type: 'RECORDING_STARTED' }
+  | { type: 'RECORDING_ERROR'; error: string }
   | { type: 'RECORDING_COMPLETE'; recordingId: string }
 
   // Jira Submission

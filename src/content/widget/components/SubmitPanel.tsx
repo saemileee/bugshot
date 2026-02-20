@@ -11,6 +11,7 @@ interface SubmitPanelProps {
   sendMessage: (msg: ExtensionMessage) => Promise<ExtensionMessage>;
   onSuccess: () => void;
   onBack?: () => void;
+  videoRecordingId?: string | null;
   isPreview?: boolean;
 }
 
@@ -33,6 +34,7 @@ export function SubmitPanel({
   sendMessage,
   onSuccess,
   onBack,
+  videoRecordingId,
   isPreview,
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,6 +64,7 @@ export function SubmitPanel({
       changes,
       manualNotes: description,
       screenshots: allScreenshots,
+      videoRecordingId: videoRecordingId || undefined,
       pageUrl: window.location.href,
       pageTitle: document.title,
     };

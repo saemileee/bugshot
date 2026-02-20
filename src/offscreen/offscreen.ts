@@ -10,11 +10,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   switch (message.type) {
     case 'start-recording':
-      startRecording(message.streamId);
-      break;
+      startRecording(message.streamId)
+        .then(() => sendResponse({ success: true }))
+        .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+      return true; // async
+
     case 'stop-recording':
       stopRecording();
+      sendResponse({ success: true });
       break;
+
     case 'get-recording':
       getRecordingFromDB(message.recordingId).then((blob) => {
         sendResponse({ blob });
@@ -24,75 +29,67 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function startRecording(streamId: string) {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        // @ts-expect-error: chromeMediaSource is a Chrome-specific constraint
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: streamId,
-        },
+  // Clean up any previous recording state
+  if (recorder && recorder.state !== 'inactive') {
+    recorder.stop();
+  }
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+    stream = null;
+  }
+
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      // @ts-expect-error: chromeMediaSource is a Chrome-specific constraint
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: streamId,
       },
-    });
+    },
+  });
 
-    recorder = new MediaRecorder(stream, {
-      mimeType: getSupportedMimeType(),
-      videoBitsPerSecond: 2_500_000, // 2.5 Mbps for reasonable file size
-    });
+  recorder = new MediaRecorder(stream, {
+    mimeType: getSupportedMimeType(),
+    videoBitsPerSecond: 2_500_000,
+  });
 
+  chunks = [];
+
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      chunks.push(event.data);
+    }
+  };
+
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
     chunks = [];
 
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunks.push(event.data);
-      }
-    };
+    stream?.getTracks().forEach((track) => track.stop());
+    stream = null;
 
-    recorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
-      chunks = [];
-
-      // Stop all tracks
-      stream?.getTracks().forEach((track) => track.stop());
-      stream = null;
-
-      // Store recording in IndexedDB
-      const recordingId = await storeRecording(blob);
-
-      // Notify service worker
-      chrome.runtime.sendMessage({
-        type: 'recording-complete',
-        target: 'service-worker',
-        recordingId,
-        size: blob.size,
-        mimeType: blob.type,
-      });
-    };
-
-    recorder.onerror = (event) => {
-      console.error('MediaRecorder error:', event);
-      chrome.runtime.sendMessage({
-        type: 'recording-error',
-        target: 'service-worker',
-        error: 'Recording failed',
-      });
-    };
-
-    recorder.start(1000); // Collect data every second
+    const recordingId = await storeRecording(blob);
 
     chrome.runtime.sendMessage({
-      type: 'recording-started',
+      type: 'recording-complete',
       target: 'service-worker',
+      recordingId,
+      size: blob.size,
+      mimeType: blob.type,
     });
-  } catch (err) {
-    console.error('Failed to start recording:', err);
+  };
+
+  recorder.onerror = (event) => {
+    console.error('MediaRecorder error:', event);
     chrome.runtime.sendMessage({
       type: 'recording-error',
       target: 'service-worker',
-      error: (err as Error).message,
+      error: 'Recording failed during capture',
     });
-  }
+  };
+
+  recorder.start(1000);
 }
 
 function stopRecording() {

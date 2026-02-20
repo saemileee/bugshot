@@ -34,12 +34,16 @@ export async function startRecording(tabId: number): Promise<void> {
     );
   });
 
-  // Tell offscreen document to start recording
-  await chrome.runtime.sendMessage({
+  // Tell offscreen document to start recording and wait for confirmation
+  const result: { success: boolean; error?: string } = await chrome.runtime.sendMessage({
     type: 'start-recording',
     target: 'offscreen',
     streamId,
   });
+
+  if (!result?.success) {
+    throw new Error(result?.error || 'Failed to start recording');
+  }
 
   isRecording = true;
   recordingTabId = targetTabId;
@@ -83,9 +87,6 @@ async function ensureOffscreenDocument(): Promise<void> {
 
 // Retrieve a recording blob from the offscreen document's IndexedDB
 export async function getRecordingBlob(recordingId: string): Promise<Blob | null> {
-  // We need to ask the offscreen document to fetch from its IndexedDB
-  // Since offscreen and service worker share the same origin, we can use
-  // chrome.runtime.sendMessage to request the blob
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(
       {
@@ -110,6 +111,5 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     if (!isRecording) {
       chrome.alarms.clear('recording-keepalive');
     }
-    // Simply waking up the service worker is enough
   }
 });

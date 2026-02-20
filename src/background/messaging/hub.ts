@@ -25,6 +25,28 @@ export function initializeMessagingHub() {
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Route recording completion from offscreen → content port
+    if (message.type === 'recording-complete' && message.target === 'service-worker') {
+      for (const [, port] of contentPorts) {
+        port.postMessage({
+          type: 'RECORDING_COMPLETE',
+          recordingId: message.recordingId,
+        });
+      }
+      return false;
+    }
+
+    // Route recording error from offscreen → content port
+    if (message.type === 'recording-error' && message.target === 'service-worker') {
+      for (const [, port] of contentPorts) {
+        port.postMessage({
+          type: 'RECORDING_COMPLETE',
+          recordingId: '__error__',
+        });
+      }
+      return false;
+    }
+
     handleOneShotMessage(message as ExtensionMessage, sender, sendResponse);
     return true; // async response
   });
@@ -108,9 +130,9 @@ function handleContentPort(port: chrome.runtime.Port) {
       case 'START_RECORDING': {
         try {
           await startRecording(message.tabId || tabId);
-          port.postMessage({ type: 'RECORDING_COMPLETE', recordingId: '__started__' });
+          port.postMessage({ type: 'RECORDING_STARTED' });
         } catch (error) {
-          console.error('Recording start failed:', error);
+          port.postMessage({ type: 'RECORDING_ERROR', error: (error as Error).message });
         }
         break;
       }
@@ -119,16 +141,6 @@ function handleContentPort(port: chrome.runtime.Port) {
         await stopRecording();
         break;
       }
-    }
-  });
-
-  // Listen for recording completion from offscreen document
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === 'recording-complete' && msg.target === 'service-worker') {
-      port.postMessage({
-        type: 'RECORDING_COMPLETE',
-        recordingId: msg.recordingId,
-      });
     }
   });
 
@@ -197,17 +209,17 @@ function handleOneShotMessage(
     case 'START_RECORDING': {
       const resolvedTabId = message.tabId || _sender.tab?.id || 0;
       startRecording(resolvedTabId).then(() => {
-        sendResponse({ type: 'RECORDING_COMPLETE', recordingId: '__started__' });
+        sendResponse({ type: 'RECORDING_STARTED' });
       }).catch((error) => {
         console.error('Recording start failed:', error);
-        sendResponse({ type: 'RECORDING_COMPLETE', recordingId: '__error__' });
+        sendResponse({ type: 'RECORDING_ERROR', error: (error as Error).message });
       });
       break;
     }
 
     case 'STOP_RECORDING': {
       stopRecording().then(() => {
-        sendResponse({ type: 'RECORDING_COMPLETE', recordingId: '__stopped__' });
+        sendResponse({ type: 'RECORDING_STARTED' });
       });
       break;
     }
