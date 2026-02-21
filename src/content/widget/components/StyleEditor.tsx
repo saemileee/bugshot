@@ -165,7 +165,7 @@ const COMMON_PROPS = [
   'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
   'color', 'background-color', 'background',
   'border', 'border-radius', 'border-color',
-  'gap', 'flex-direction', 'align-items', 'justify-content',
+  'row-gap', 'column-gap', 'flex-direction', 'align-items', 'justify-content',
   'opacity', 'overflow', 'z-index', 'box-shadow', 'text-align',
 ];
 
