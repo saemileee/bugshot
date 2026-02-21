@@ -12,6 +12,7 @@ import { useContentCSSTracking } from './hooks/useContentCSSTracking';
 import { useScreenshot } from './hooks/useScreenshot';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage } from '@/shared/types/messages';
+import { STORAGE_KEYS } from '@/shared/constants';
 
 export type WidgetTab = 'capture' | 'describe' | 'changes' | 'submit';
 
@@ -22,6 +23,26 @@ export interface ScreenshotData {
 }
 
 export function WidgetRoot() {
+  // ── Widget visibility (persisted) ──
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    // Load persisted visibility
+    chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
+      const stored = result[STORAGE_KEYS.WIDGET_VISIBLE];
+      if (stored !== undefined) setVisible(stored);
+    });
+
+    // Listen for toggle messages from service worker
+    const listener = (message: { type: string; visible: boolean }) => {
+      if (message.type === 'TOGGLE_WIDGET') {
+        setVisible(message.visible);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<ToolbarTab>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -425,6 +446,8 @@ export function WidgetRoot() {
 
     return null;
   })();
+
+  if (!visible) return null;
 
   return (
     <FloatingWidget

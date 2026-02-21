@@ -8,6 +8,8 @@ export const STORAGE_KEYS = {
   RECENT_SUBMISSIONS: 'recentSubmissions',
   BATCH_CHANGES: 'batchChanges',
   INTEGRATIONS: 'integrations',
+  // Widget visibility toggle
+  WIDGET_VISIBLE: 'widgetVisible',
 } as const;
 
 // Default CSS properties to track (design-relevant)
