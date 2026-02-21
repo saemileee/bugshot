@@ -156,7 +156,7 @@ function collectRuleBlocks(el: Element): StyleRuleBlock[] {
   return allBlocks;
 }
 
-/* ── Computed styles supplement ── */
+/* ── Computed styles fallback (when no rule blocks found) ── */
 
 const COMMON_PROPS = [
   'display', 'position', 'width', 'height', 'max-width', 'min-width',
@@ -169,26 +169,20 @@ const COMMON_PROPS = [
   'opacity', 'overflow', 'z-index', 'box-shadow', 'text-align',
 ];
 
-const DEFAULT_VALUES = new Set([
-  '', 'none', 'normal', 'auto', '0px', '0',
-  'rgba(0, 0, 0, 0)', 'rgb(0, 0, 0)',
-  'start', 'stretch', 'row', 'visible', 'static',
-]);
-
-function getComputedBlock(el: Element, exclude: Set<string>): StyleRuleBlock {
+function getComputedBlock(el: Element): StyleRuleBlock {
   const computed = window.getComputedStyle(el);
   const props: RuleProperty[] = [];
   for (const prop of COMMON_PROPS) {
-    if (exclude.has(prop)) continue;
     const val = computed.getPropertyValue(prop).trim();
-    if (val && !DEFAULT_VALUES.has(val)) {
+    if (val && val !== 'none' && val !== 'normal' && val !== 'auto'
+      && val !== '0px' && val !== 'rgba(0, 0, 0, 0)' && val !== 'rgb(0, 0, 0)') {
       props.push({ property: prop, value: val, priority: '', overridden: false });
     }
   }
   return {
     id: 'computed-block',
     selector: 'Computed',
-    source: '',
+    source: '(stylesheets not accessible)',
     properties: props,
     isInline: false,
   };
@@ -221,15 +215,9 @@ export function StyleEditor({ element }: StyleEditorProps) {
     setTextContent(directText.trim());
 
     const collected = collectRuleBlocks(element);
-    // Collect properties already shown in rule blocks
-    const coveredProps = new Set<string>();
-    for (const block of collected) {
-      for (const p of block.properties) coveredProps.add(p.property);
-    }
-    // Add computed styles for properties not covered by any rule block
-    const computedBlock = getComputedBlock(element, coveredProps);
-    if (computedBlock.properties.length > 0) {
-      collected.push(computedBlock);
+    // If only inline block found (no rule blocks), add computed fallback
+    if (collected.length <= 1) {
+      collected.push(getComputedBlock(element));
     }
     setBlocks(collected);
   }, [element]);
