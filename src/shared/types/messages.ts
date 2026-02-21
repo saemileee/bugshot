@@ -4,8 +4,6 @@ import type { IntegrationId, IntegrationResult, SubmissionPayload } from './inte
 export type ExtensionMessage =
   // CSS Tracking (DevTools Panel <-> Service Worker)
   | { type: 'INIT_CSS_TRACKING'; tabId: number }
-  | { type: 'STOP_CSS_TRACKING'; tabId: number }
-  | { type: 'CSS_TRACKING_READY' }
   | { type: 'INLINE_STYLE_CHANGED'; selector: string; oldValue: string; newValue: string; url: string; timestamp: number }
 
   // Screenshot (Content Script <-> Service Worker)
@@ -30,7 +28,6 @@ export type ExtensionMessage =
 
   // Change Sync (DevTools Panel <-> Content Script via Service Worker)
   | { type: 'SYNC_CHANGES'; changes: CSSChange[] }
-  | { type: 'REQUEST_CHANGES' }
 
   // Element inspection (Content Script -> DevTools Panel via Service Worker)
   | { type: 'INSPECT_ELEMENT'; selector: string }

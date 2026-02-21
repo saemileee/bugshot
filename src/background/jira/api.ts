@@ -227,20 +227,3 @@ export async function searchIssues(
   });
 }
 
-export async function linkIssueToEpic(
-  issueKey: string,
-  epicKey: string,
-): Promise<void> {
-  try {
-    await jiraFetch('/rest/api/3/issueLink', {
-      method: 'POST',
-      body: JSON.stringify({
-        type: { name: 'Epic-Story Link' },
-        inwardIssue: { key: epicKey },
-        outwardIssue: { key: issueKey },
-      }),
-    });
-  } catch {
-    console.warn('Issue link failed, epic may already be set via parent field');
-  }
-}

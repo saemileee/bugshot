@@ -36,20 +36,14 @@ export default defineManifest({
   },
 
   permissions: [
-    'activeTab',
     'tabs',
     'storage',
-    'identity',
-    'scripting',
     'offscreen',
-    'tabCapture',
     'alarms',
   ],
 
   host_permissions: [
     '<all_urls>',
     'https://*.atlassian.net/*',
-    'https://auth.atlassian.com/*',
-    'https://api.atlassian.com/*',
   ],
 });

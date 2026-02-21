@@ -141,12 +141,6 @@ export function useAnnotation() {
     historyRef.current[historyRef.current.length - 1] = imageData;
   }, [tool, color, saveToHistory]);
 
-  const getAnnotatedDataUrl = useCallback((): string | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    return canvas.toDataURL('image/png');
-  }, []);
-
   return {
     tool,
     setTool,
@@ -159,7 +153,6 @@ export function useAnnotation() {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
-    getAnnotatedDataUrl,
   };
 }
 

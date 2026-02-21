@@ -118,11 +118,6 @@ function handleContentPort(port: chrome.runtime.Port) {
         break;
       }
 
-      case 'REQUEST_CHANGES': {
-        devtoolsPorts.get(tabId)?.postMessage(message);
-        break;
-      }
-
       case 'INSPECT_ELEMENT': {
         devtoolsPorts.get(tabId)?.postMessage(message);
         break;
