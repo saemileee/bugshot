@@ -186,6 +186,7 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
   const inputRef = useRef<HTMLInputElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const [tokenDropdownOpen, setTokenDropdownOpen] = useState(false);
+  const tokenDropdownRef = useRef<HTMLDivElement>(null);
   // Keep latest onChange in a ref so inline handlers always call the current version
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -246,6 +247,16 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
+  // Scroll to the active token when dropdown opens
+  useEffect(() => {
+    if (tokenDropdownOpen && tokenDropdownRef.current) {
+      const active = tokenDropdownRef.current.querySelector('.qa-sp-token-option.active');
+      if (active) {
+        active.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [tokenDropdownOpen]);
+
   return (
     <span className="qa-sp-pvi">
       {/* Color swatch */}
@@ -292,7 +303,7 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
 
             {/* Token dropdown */}
             {tokenDropdownOpen && similarTokens.length > 0 && (
-              <div className="qa-sp-token-dropdown" onMouseDown={(e) => e.stopPropagation()}>
+              <div ref={tokenDropdownRef} className="qa-sp-token-dropdown" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="qa-sp-token-dropdown-title">
                   {similarTokens.length > 1
                     ? `${getTokenPrefix(varRef.token)}-* (${similarTokens.length})`
