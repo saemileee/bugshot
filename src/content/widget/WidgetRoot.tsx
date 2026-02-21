@@ -33,14 +33,17 @@ export function WidgetRoot() {
       if (stored !== undefined) setVisible(stored);
     });
 
-    // Listen for toggle messages from service worker
-    const listener = (message: { type: string; visible: boolean }) => {
-      if (message.type === 'TOGGLE_WIDGET') {
-        setVisible(message.visible);
+    // Listen for storage changes (reliable across all tabs)
+    const onChanged = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      area: string,
+    ) => {
+      if (area === 'local' && STORAGE_KEYS.WIDGET_VISIBLE in changes) {
+        setVisible(changes[STORAGE_KEYS.WIDGET_VISIBLE].newValue ?? true);
       }
     };
-    chrome.runtime.onMessage.addListener(listener);
-    return () => chrome.runtime.onMessage.removeListener(listener);
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
   // ── UI state ──

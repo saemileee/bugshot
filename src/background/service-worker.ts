@@ -44,18 +44,11 @@ chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
 });
 
 // Toggle widget visibility when extension icon is clicked
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id) return;
-
+chrome.action.onClicked.addListener(async () => {
   const result = await chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE);
   const currentVisible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
   const newVisible = !currentVisible;
 
   await chrome.storage.local.set({ [STORAGE_KEYS.WIDGET_VISIBLE]: newVisible });
   updateIcon(newVisible);
-
-  chrome.tabs.sendMessage(tab.id, {
-    type: 'TOGGLE_WIDGET',
-    visible: newVisible,
-  });
 });
