@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
 import type { IntegrationResult, SubmissionPayload, IntegrationId, JiraSubmitOptions } from '@/shared/types/integration';
 import type { ScreenshotData } from '../WidgetRoot';
 import { STORAGE_KEYS } from '@/shared/constants';
+import { SearchableSelect, type SelectOption } from './SearchableSelect';
 
 interface JiraUser { accountId: string; displayName: string; avatarUrl?: string }
 interface JiraPriority { id: string; name: string; iconUrl?: string }
@@ -194,6 +195,24 @@ export function SubmitPanel({
   }, [changes, loadJiraOptions]);
 
   const useMultiIntegration = enabledCount > 0;
+
+  // Convert Jira data to SelectOption format
+  const assigneeOptions: SelectOption[] = useMemo(() =>
+    jiraAssignees.map((u) => ({
+      value: u.accountId,
+      label: u.displayName,
+      avatarUrl: u.avatarUrl,
+    })),
+    [jiraAssignees]
+  );
+
+  const priorityOptions: SelectOption[] = useMemo(() =>
+    jiraPriorities.map((p) => ({
+      value: p.id,
+      label: p.name,
+    })),
+    [jiraPriorities]
+  );
 
   const handleCopy = useCallback(async () => {
     const html = generateHtml(editSummary, changes, description, screenshots.length);
@@ -479,40 +498,28 @@ export function SubmitPanel({
 
             {jiraOptionsOpen && (
               <div style={{ marginTop: 12 }}>
-                {loadingJiraOptions ? (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading options...</div>
-                ) : (
-                  <>
-                    <div className="qa-settings-field" style={{ marginBottom: 8 }}>
-                      <label className="qa-settings-label" style={{ fontSize: 11 }}>Assignee</label>
-                      <select
-                        className="qa-settings-input"
-                        value={selectedAssignee}
-                        onChange={(e) => setSelectedAssignee(e.target.value)}
-                        style={{ fontSize: 12 }}
-                      >
-                        <option value="">Unassigned</option>
-                        {jiraAssignees.map((u) => (
-                          <option key={u.accountId} value={u.accountId}>{u.displayName}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="qa-settings-field">
-                      <label className="qa-settings-label" style={{ fontSize: 11 }}>Priority</label>
-                      <select
-                        className="qa-settings-input"
-                        value={selectedPriority}
-                        onChange={(e) => setSelectedPriority(e.target.value)}
-                        style={{ fontSize: 12 }}
-                      >
-                        <option value="">Default</option>
-                        {jiraPriorities.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
+                <div className="qa-settings-field" style={{ marginBottom: 8 }}>
+                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Assignee</label>
+                  <SearchableSelect
+                    options={assigneeOptions}
+                    value={selectedAssignee}
+                    onChange={setSelectedAssignee}
+                    placeholder="Search assignee..."
+                    emptyLabel="Unassigned"
+                    loading={loadingJiraOptions}
+                  />
+                </div>
+                <div className="qa-settings-field">
+                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Priority</label>
+                  <SearchableSelect
+                    options={priorityOptions}
+                    value={selectedPriority}
+                    onChange={setSelectedPriority}
+                    placeholder="Search priority..."
+                    emptyLabel="Default"
+                    loading={loadingJiraOptions}
+                  />
+                </div>
               </div>
             )}
           </div>
