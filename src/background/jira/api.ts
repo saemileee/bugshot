@@ -59,26 +59,9 @@ export async function createIssue(
       fields.priority = { id: payload.priorityId };
     }
 
-    // Handle parent linking
+    // Handle parent for subtasks (non-epic parents)
     if (payload.parentKey) {
-      // Check if parent is an Epic
-      const parentType = await getIssueType(payload.parentKey);
-      const isParentEpic = parentType?.toLowerCase() === 'epic';
-
-      if (isParentEpic) {
-        // For Epics, try to use Epic Link field first (classic projects)
-        const epicLinkFieldId = await getEpicLinkFieldId(payload.projectKey);
-        if (epicLinkFieldId) {
-          // Use Epic Link custom field
-          fields[epicLinkFieldId] = payload.parentKey;
-        } else {
-          // Fallback to parent field (team-managed projects)
-          fields.parent = { key: payload.parentKey };
-        }
-      } else {
-        // For non-Epic parents (subtasks or team-managed hierarchy)
-        fields.parent = { key: payload.parentKey };
-      }
+      fields.parent = { key: payload.parentKey };
     }
 
     const response = await jiraFetch('/rest/api/3/issue', {
@@ -135,6 +118,32 @@ export async function updateIssueDescriptionWiki(
     method: 'PUT',
     body: JSON.stringify({ fields: { description: wikiMarkup } }),
   });
+}
+
+/**
+ * Link an issue to an epic after creation.
+ * This is more reliable than setting epic during creation.
+ */
+export async function linkIssueToEpic(
+  issueKey: string,
+  epicKey: string,
+  projectKey: string,
+): Promise<void> {
+  // Try Epic Link custom field first (company-managed projects)
+  const epicLinkFieldId = await getEpicLinkFieldId(projectKey);
+
+  if (epicLinkFieldId) {
+    await jiraFetch(`/rest/api/3/issue/${issueKey}`, {
+      method: 'PUT',
+      body: JSON.stringify({ fields: { [epicLinkFieldId]: epicKey } }),
+    });
+  } else {
+    // Fallback to parent field (team-managed projects)
+    await jiraFetch(`/rest/api/3/issue/${issueKey}`, {
+      method: 'PUT',
+      body: JSON.stringify({ fields: { parent: { key: epicKey } } }),
+    });
+  }
 }
 
 // ── Fetch helpers for dynamic settings ──

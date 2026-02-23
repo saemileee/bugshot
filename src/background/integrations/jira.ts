@@ -5,6 +5,7 @@ import {
   createIssue,
   addAttachment,
   updateIssueDescriptionWiki,
+  linkIssueToEpic,
 } from '../jira/api';
 import { getRecordingBlob } from '../recording/manager';
 import { STORAGE_KEYS } from '@/shared/constants';
@@ -79,11 +80,22 @@ export async function submitToJira(
       issueType: config.settings.issueType || 'Task',
       summary,
       description,
-      parentKey: payload.jiraOptions?.epicKey || config.settings.parentKey || undefined,
       assigneeId: payload.jiraOptions?.assigneeId,
       priorityId: payload.jiraOptions?.priorityId,
     });
     console.log('[Jira] Issue created:', issue.key);
+
+    // Phase 1.5: Link to epic (if specified)
+    const epicKey = payload.jiraOptions?.epicKey;
+    if (epicKey) {
+      try {
+        await linkIssueToEpic(issue.key, epicKey, projectKey);
+        console.log('[Jira] Linked to epic:', epicKey);
+      } catch (err) {
+        console.warn('[Jira] Failed to link to epic:', err);
+        // Don't fail the whole submission if epic linking fails
+      }
+    }
 
     // Phase 2: Upload attachments
     let uploadedCount = 0;
