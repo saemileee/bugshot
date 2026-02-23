@@ -313,11 +313,12 @@
 }
 
 .qa-btn-next {
-  @apply bg-white text-slate-700 hover:bg-slate-50;
+  @apply text-slate-700 hover:bg-gray-100;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #e2e8f0;
+  background: none;
+  border: 1.5px solid #cbd5e1;
 }
 
 .qa-btn-next svg {
