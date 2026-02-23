@@ -13,8 +13,6 @@ export default defineManifest({
     '128': 'src/assets/icons/icon-128.png',
   },
 
-  devtools_page: 'src/devtools/devtools.html',
-
   background: {
     service_worker: 'src/background/service-worker.ts',
     type: 'module' as const,

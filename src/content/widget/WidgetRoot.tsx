@@ -123,16 +123,6 @@ export function WidgetRoot() {
     }
   }, [picker.pickedElement, tracking.captureBefore, captureElement]);
 
-  // ── Tell DevTools to inspect the element ──
-  useEffect(() => {
-    if (tracking.status.state === 'before_captured' && port.current) {
-      port.current.postMessage({
-        type: 'INSPECT_ELEMENT',
-        selector: tracking.status.selector,
-      });
-    }
-  }, [tracking.status, port]);
-
   // ── Auto-open notes when description exists ──
   useEffect(() => {
     if (description.trim()) setNotesOpen(true);

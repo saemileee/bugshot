@@ -17,8 +17,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        devtools: 'src/devtools/devtools.html',
-        panel: 'src/devtools/panel/panel.html',
         offscreen: 'src/offscreen/offscreen.html',
       },
     },

@@ -25,19 +25,13 @@ import {
   getAllIntegrationStatuses,
 } from '../integrations/registry';
 
-// Port registries keyed by tabId
-const devtoolsPorts = new Map<number, chrome.runtime.Port>();
+// Port registry keyed by tabId
 const contentPorts = new Map<number, chrome.runtime.Port>();
 
 export function initializeMessagingHub() {
   chrome.runtime.onConnect.addListener((port) => {
-    switch (port.name) {
-      case 'devtools-panel':
-        handleDevToolsPort(port);
-        break;
-      case 'content-widget':
-        handleContentPort(port);
-        break;
+    if (port.name === 'content-widget') {
+      handleContentPort(port);
     }
   });
 
@@ -71,33 +65,6 @@ export function initializeMessagingHub() {
   });
 }
 
-function handleDevToolsPort(port: chrome.runtime.Port) {
-  port.onMessage.addListener((message: ExtensionMessage) => {
-    if (message.type === 'INIT_CSS_TRACKING') {
-      devtoolsPorts.set(message.tabId, port);
-    }
-
-    if (message.type === 'SYNC_CHANGES') {
-      // Forward changes to content script widget for the same tab
-      for (const [tabId, p] of devtoolsPorts) {
-        if (p === port) {
-          contentPorts.get(tabId)?.postMessage(message);
-          break;
-        }
-      }
-    }
-  });
-
-  port.onDisconnect.addListener(() => {
-    for (const [tabId, p] of devtoolsPorts) {
-      if (p === port) {
-        devtoolsPorts.delete(tabId);
-        break;
-      }
-    }
-  });
-}
-
 function handleContentPort(port: chrome.runtime.Port) {
   const tabId = port.sender?.tab?.id;
   if (tabId === undefined) return;
@@ -115,11 +82,6 @@ function handleContentPort(port: chrome.runtime.Port) {
         } catch (error) {
           console.error('Screenshot capture failed:', error);
         }
-        break;
-      }
-
-      case 'INSPECT_ELEMENT': {
-        devtoolsPorts.get(tabId)?.postMessage(message);
         break;
       }
 

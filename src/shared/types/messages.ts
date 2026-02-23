@@ -2,10 +2,6 @@ import type { CSSChange } from './css-change';
 import type { IntegrationId, IntegrationResult, SubmissionPayload } from './integration';
 
 export type ExtensionMessage =
-  // CSS Tracking (DevTools Panel <-> Service Worker)
-  | { type: 'INIT_CSS_TRACKING'; tabId: number }
-  | { type: 'INLINE_STYLE_CHANGED'; selector: string; oldValue: string; newValue: string; url: string; timestamp: number }
-
   // Screenshot (Content Script <-> Service Worker)
   | { type: 'CAPTURE_SCREENSHOT'; tabId: number }
   | { type: 'SCREENSHOT_CAPTURED'; dataUrl: string }
@@ -25,12 +21,6 @@ export type ExtensionMessage =
   // Multi-Integration Submission
   | { type: 'SUBMIT_TO_INTEGRATIONS'; payload: SubmissionPayload }
   | { type: 'INTEGRATION_RESULTS'; results: IntegrationResult[] }
-
-  // Change Sync (DevTools Panel <-> Content Script via Service Worker)
-  | { type: 'SYNC_CHANGES'; changes: CSSChange[] }
-
-  // Element inspection (Content Script -> DevTools Panel via Service Worker)
-  | { type: 'INSPECT_ELEMENT'; selector: string }
 
   // Auth (API Token) — Jira legacy
   | { type: 'SAVE_JIRA_CREDENTIALS'; email: string; apiToken: string; siteUrl: string }
