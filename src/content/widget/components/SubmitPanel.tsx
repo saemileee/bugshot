@@ -8,7 +8,6 @@ import { SearchableSelect, type SelectOption } from './SearchableSelect';
 
 interface JiraUser { accountId: string; displayName: string; avatarUrl?: string }
 interface JiraPriority { id: string; name: string; iconUrl?: string }
-interface JiraEpic { key: string; summary: string; status: string }
 
 interface SubmitPanelProps {
   screenshots: ScreenshotData[];
@@ -150,37 +149,24 @@ export function SubmitPanel({
   const [jiraOptionsOpen, setJiraOptionsOpen] = useState(true);
   const [jiraAssignees, setJiraAssignees] = useState<JiraUser[]>([]);
   const [jiraPriorities, setJiraPriorities] = useState<JiraPriority[]>([]);
-  const [jiraEpics, setJiraEpics] = useState<JiraEpic[]>([]);
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
-  const [selectedEpic, setSelectedEpic] = useState<string>('');
+  const [epicKey, setEpicKey] = useState<string>('');
   const [loadingJiraOptions, setLoadingJiraOptions] = useState(false);
 
   const loadJiraOptions = useCallback(async (projectKey: string) => {
     setLoadingJiraOptions(true);
     try {
-      const [assigneesRes, prioritiesRes, epicsRes] = await Promise.all([
+      const [assigneesRes, prioritiesRes] = await Promise.all([
         new Promise<{ success: boolean; data?: JiraUser[] }>((resolve) => {
           chrome.runtime.sendMessage({ type: 'FETCH_JIRA_ASSIGNEES', projectKey }, resolve);
         }),
         new Promise<{ success: boolean; data?: JiraPriority[] }>((resolve) => {
           chrome.runtime.sendMessage({ type: 'FETCH_JIRA_PRIORITIES' }, resolve);
         }),
-        new Promise<{ success: boolean; data?: JiraEpic[] }>((resolve) => {
-          chrome.runtime.sendMessage({ type: 'FETCH_JIRA_EPICS', projectKey }, (res) => {
-            console.log('[SubmitPanel] Epics response:', res);
-            resolve(res);
-          });
-        }),
       ]);
       if (assigneesRes.success && assigneesRes.data) setJiraAssignees(assigneesRes.data);
       if (prioritiesRes.success && prioritiesRes.data) setJiraPriorities(prioritiesRes.data);
-      if (epicsRes.success && epicsRes.data) {
-        console.log('[SubmitPanel] Setting epics:', epicsRes.data.length);
-        setJiraEpics(epicsRes.data);
-      } else {
-        console.log('[SubmitPanel] No epics or failed:', epicsRes);
-      }
     } finally {
       setLoadingJiraOptions(false);
     }
@@ -231,23 +217,23 @@ export function SubmitPanel({
       if (opts) {
         if (opts.assigneeId) setSelectedAssignee(opts.assigneeId);
         if (opts.priorityId) setSelectedPriority(opts.priorityId);
-        if (opts.epicKey) setSelectedEpic(opts.epicKey);
+        if (opts.epicKey) setEpicKey(opts.epicKey);
       }
     });
   }, [changes, loadJiraOptions]);
 
   // Save Jira options when they change
   useEffect(() => {
-    if (selectedAssignee || selectedPriority || selectedEpic) {
+    if (selectedAssignee || selectedPriority || epicKey) {
       chrome.storage.local.set({
         [STORAGE_KEYS.JIRA_SUBMIT_OPTIONS]: {
           assigneeId: selectedAssignee,
           priorityId: selectedPriority,
-          epicKey: selectedEpic,
+          epicKey: epicKey,
         },
       });
     }
-  }, [selectedAssignee, selectedPriority, selectedEpic]);
+  }, [selectedAssignee, selectedPriority, epicKey]);
 
   const useMultiIntegration = enabledCount > 0;
 
@@ -269,14 +255,6 @@ export function SubmitPanel({
     [jiraPriorities]
   );
 
-  const epicOptions: SelectOption[] = useMemo(() =>
-    jiraEpics.map((e) => ({
-      value: e.key,
-      label: e.summary,
-      subLabel: `${e.key} · ${e.status}`,
-    })),
-    [jiraEpics]
-  );
 
   const handleCopy = useCallback(async () => {
     const html = generateHtml(editSummary, changes, description, screenshots.length);
@@ -317,7 +295,7 @@ export function SubmitPanel({
     const jiraOptions: JiraSubmitOptions = {};
     if (selectedAssignee) jiraOptions.assigneeId = selectedAssignee;
     if (selectedPriority) jiraOptions.priorityId = selectedPriority;
-    if (selectedEpic) jiraOptions.epicKey = selectedEpic;
+    if (epicKey.trim()) jiraOptions.epicKey = epicKey.trim();
 
     if (useMultiIntegration) {
       // Multi-integration path
@@ -562,9 +540,9 @@ export function SubmitPanel({
             >
               <div className="qa-preview-label" style={{ marginBottom: 0 }}>
                 Jira Options
-                {(selectedAssignee || selectedPriority || selectedEpic) && (
+                {(selectedAssignee || selectedPriority || epicKey) && (
                   <span style={{ marginLeft: 6, fontSize: 11, color: '#3b82f6' }}>
-                    ({[selectedAssignee && 'Assignee', selectedPriority && 'Priority', selectedEpic && 'Epic'].filter(Boolean).join(', ')})
+                    ({[selectedAssignee && 'Assignee', selectedPriority && 'Priority', epicKey && 'Epic'].filter(Boolean).join(', ')})
                   </span>
                 )}
               </div>
@@ -606,14 +584,14 @@ export function SubmitPanel({
                   />
                 </div>
                 <div className="qa-settings-field">
-                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Epic</label>
-                  <SearchableSelect
-                    options={epicOptions}
-                    value={selectedEpic}
-                    onChange={setSelectedEpic}
-                    placeholder="Search epic..."
-                    emptyLabel="None"
-                    loading={loadingJiraOptions}
+                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Epic Key</label>
+                  <input
+                    className="qa-settings-input"
+                    type="text"
+                    value={epicKey}
+                    onChange={(e) => setEpicKey(e.target.value.toUpperCase())}
+                    placeholder="e.g. PROJ-123"
+                    spellCheck={false}
                   />
                 </div>
               </div>

@@ -122,27 +122,74 @@ export async function updateIssueDescriptionWiki(
 
 /**
  * Link an issue to an epic after creation.
- * This is more reliable than setting epic during creation.
+ * Tries multiple methods: Epic Link field, parent field, then issue link.
  */
 export async function linkIssueToEpic(
   issueKey: string,
   epicKey: string,
   projectKey: string,
 ): Promise<void> {
-  // Try Epic Link custom field first (company-managed projects)
+  // Method 1: Try Epic Link custom field (company-managed projects)
   const epicLinkFieldId = await getEpicLinkFieldId(projectKey);
 
   if (epicLinkFieldId) {
-    await jiraFetch(`/rest/api/3/issue/${issueKey}`, {
-      method: 'PUT',
-      body: JSON.stringify({ fields: { [epicLinkFieldId]: epicKey } }),
-    });
-  } else {
-    // Fallback to parent field (team-managed projects)
+    try {
+      await jiraFetch(`/rest/api/3/issue/${issueKey}`, {
+        method: 'PUT',
+        body: JSON.stringify({ fields: { [epicLinkFieldId]: epicKey } }),
+      });
+      console.log('[Jira] Linked via Epic Link field');
+      return;
+    } catch (err) {
+      console.warn('[Jira] Epic Link field failed, trying parent field:', err);
+    }
+  }
+
+  // Method 2: Try parent field (team-managed projects)
+  try {
     await jiraFetch(`/rest/api/3/issue/${issueKey}`, {
       method: 'PUT',
       body: JSON.stringify({ fields: { parent: { key: epicKey } } }),
     });
+    console.log('[Jira] Linked via parent field');
+    return;
+  } catch (err) {
+    console.warn('[Jira] Parent field failed, trying issue link:', err);
+  }
+
+  // Method 3: Try issue link (relates to)
+  try {
+    await jiraFetch('/rest/api/3/issueLink', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: { name: 'Relates' },
+        inwardIssue: { key: issueKey },
+        outwardIssue: { key: epicKey },
+      }),
+    });
+    console.log('[Jira] Linked via issue link (Relates)');
+    return;
+  } catch (err) {
+    // Try alternative link type names
+    const linkTypes = ['relates to', 'Epic-Story Link', 'is child of'];
+    for (const linkType of linkTypes) {
+      try {
+        await jiraFetch('/rest/api/3/issueLink', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: { name: linkType },
+            inwardIssue: { key: issueKey },
+            outwardIssue: { key: epicKey },
+          }),
+        });
+        console.log(`[Jira] Linked via issue link (${linkType})`);
+        return;
+      } catch {
+        // Try next type
+      }
+    }
+    console.error('[Jira] All epic linking methods failed');
+    throw new Error('Failed to link issue to epic');
   }
 }
 
@@ -224,25 +271,78 @@ export async function fetchEpics(projectKey: string): Promise<JiraEpic[]> {
   }
 
   try {
-    const jql = encodeURIComponent(
-      `project = "${projectKey}" AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`,
+    // First, find the Epic issue type for this project
+    const issueTypes = await fetchIssueTypes(projectKey);
+    const epicType = issueTypes.find(
+      (t) => t.name.toLowerCase() === 'epic' ||
+             t.name === '에픽' ||
+             t.name.toLowerCase().includes('epic')
     );
-    console.log('[Jira] Fetching epics for project:', projectKey, 'JQL:', decodeURIComponent(jql));
+
+    console.log('[Jira] Project issue types:', issueTypes.map(t => t.name));
+    console.log('[Jira] Found epic type:', epicType);
+
+    let jql: string;
+    if (epicType) {
+      // Use issue type ID for more reliable matching
+      jql = `project = "${projectKey}" AND issuetype = ${epicType.id} AND statusCategory != Done ORDER BY updated DESC`;
+    } else {
+      // Fallback: try to find issues that can be parents (hierarchyLevel = 1 for epics in next-gen)
+      console.warn('[Jira] No Epic type found, trying parent-capable issues');
+      jql = `project = "${projectKey}" AND hierarchyLevel = 1 AND statusCategory != Done ORDER BY updated DESC`;
+    }
+
+    console.log('[Jira] Fetching epics with JQL:', jql);
     const response = await jiraFetch(
-      `/rest/api/3/search?jql=${jql}&maxResults=50&fields=summary,status`,
+      `/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=summary,status,issuetype`,
     );
     const data = await response.json();
     console.log('[Jira] Epics raw response:', JSON.stringify(data).slice(0, 500));
-    console.log('[Jira] Epics response:', data.issues?.length || 0, 'epics found');
-    return (data.issues || []).map((i: Record<string, unknown>) => {
-      const fields = i.fields as Record<string, unknown>;
-      const status = fields.status as Record<string, unknown> | undefined;
-      return {
-        key: i.key,
-        summary: (fields.summary as string) || '',
-        status: (status?.name as string) || '',
-      };
-    });
+
+    if (data.issues?.length > 0) {
+      console.log('[Jira] Found', data.issues.length, 'epics');
+      return data.issues.map((i: Record<string, unknown>) => {
+        const fields = i.fields as Record<string, unknown>;
+        const status = fields.status as Record<string, unknown> | undefined;
+        return {
+          key: i.key as string,
+          summary: (fields.summary as string) || '',
+          status: (status?.name as string) || '',
+        };
+      });
+    }
+
+    // If hierarchyLevel didn't work, try without it
+    if (!epicType) {
+      console.log('[Jira] Trying fallback: all non-subtask issues');
+      const fallbackJql = `project = "${projectKey}" AND issuetype != subtask AND statusCategory != Done ORDER BY updated DESC`;
+      const fallbackResponse = await jiraFetch(
+        `/rest/api/3/search?jql=${encodeURIComponent(fallbackJql)}&maxResults=30&fields=summary,status,issuetype`,
+      );
+      const fallbackData = await fallbackResponse.json();
+
+      // Filter to only show issues that look like epics (have "epic" in type name or are hierarchy level 1)
+      const potentialEpics = (fallbackData.issues || []).filter((i: Record<string, unknown>) => {
+        const fields = i.fields as Record<string, unknown>;
+        const issueType = fields.issuetype as Record<string, unknown> | undefined;
+        const typeName = (issueType?.name as string) || '';
+        const hierarchyLevel = issueType?.hierarchyLevel as number | undefined;
+        return typeName.toLowerCase().includes('epic') || hierarchyLevel === 1;
+      });
+
+      console.log('[Jira] Fallback found', potentialEpics.length, 'potential epics');
+      return potentialEpics.map((i: Record<string, unknown>) => {
+        const fields = i.fields as Record<string, unknown>;
+        const status = fields.status as Record<string, unknown> | undefined;
+        return {
+          key: i.key as string,
+          summary: (fields.summary as string) || '',
+          status: (status?.name as string) || '',
+        };
+      });
+    }
+
+    return [];
   } catch (err) {
     console.error('[Jira] Failed to fetch epics:', err);
     return [];
