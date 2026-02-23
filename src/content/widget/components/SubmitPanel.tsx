@@ -608,7 +608,7 @@ export function SubmitPanel({
         {/* Submit button */}
         {!allSuccess && !legacyResult?.success && (
           <button
-            className="qa-btn qa-btn-success qa-btn-block qa-btn-lg"
+            className="qa-btn qa-btn-primary qa-btn-block qa-btn-lg"
             onClick={handleSubmit}
             disabled={isSubmitting || !editSummary.trim()}
             style={{ marginBottom: 16 }}

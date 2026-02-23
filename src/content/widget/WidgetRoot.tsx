@@ -228,12 +228,14 @@ export function WidgetRoot() {
         status: 'pending',
       };
       setChanges((prev) => [...prev, noteChange]);
-      tracking.reset();
     }
 
+    // Clear selection after capture
     setEditNote('');
     beforeScreenshotRef.current = null;
-  }, [tracking, picker.pickedElement, captureElement, editNote]);
+    tracking.reset();
+    picker.clearPicked();
+  }, [tracking, picker, captureElement, editNote]);
 
   const handleResetCapture = useCallback(() => {
     beforeScreenshotRef.current = null;
@@ -295,8 +297,11 @@ export function WidgetRoot() {
             <button className="qa-btn qa-btn-ghost" onClick={handleResetCapture}>
               Cancel
             </button>
-            <button className="qa-btn qa-btn-success qa-footer-primary" onClick={handleCaptureAfter}>
+            <button className="qa-btn qa-btn-next qa-footer-primary" onClick={handleCaptureAfter}>
               Capture Changes
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
             </button>
           </div>
         </div>
@@ -309,10 +314,13 @@ export function WidgetRoot() {
       return (
         <div className="qa-footer-actions">
           <button
-            className="qa-btn qa-btn-success qa-footer-primary"
+            className="qa-btn qa-btn-next qa-footer-primary"
             onClick={() => setShowPreview(true)}
           >
             Review & Submit
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
           </button>
         </div>
       );
@@ -515,6 +523,7 @@ export function WidgetRoot() {
       isRecording={isRecording}
       isPicking={picker.isPicking}
       isCapturing={isCapturing}
+      isPreviewMode={showPreview}
       hasContent={hasContent}
       onPickElement={handleStartPicking}
       onScreenshot={handleToolbarScreenshot}

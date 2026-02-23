@@ -8,6 +8,7 @@ interface FloatingWidgetProps {
   isRecording: boolean;
   isPicking: boolean;
   isCapturing?: boolean;
+  isPreviewMode?: boolean;
   hasContent: boolean;
   onPickElement: () => void;
   onScreenshot: () => void;
@@ -26,6 +27,7 @@ export function FloatingWidget({
   isRecording,
   isPicking,
   isCapturing,
+  isPreviewMode,
   hasContent,
   onPickElement,
   onScreenshot,
@@ -45,9 +47,16 @@ export function FloatingWidget({
   }));
   const [panelW, setPanelW] = useState(DEFAULT_W);
   const [panelH, setPanelH] = useState(PANEL_H);
+  const [panelFlash, setPanelFlash] = useState(false);
   const isDragging = useRef<'bar' | 'panel' | false>(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const isPanelOpen = activeTab !== null;
+
+  // Flash panel when toolbar action is blocked in preview mode
+  const flashPanel = useCallback(() => {
+    setPanelFlash(true);
+    setTimeout(() => setPanelFlash(false), 600);
+  }, []);
 
   // ── Toolbar drag ──
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
@@ -120,7 +129,7 @@ export function FloatingWidget({
       {/* ── Y-axis Panel (draggable) ── */}
       {showPanel && (
         <div
-          className="qa-panel qa-slide-in"
+          className={`qa-panel qa-slide-in ${panelFlash ? 'qa-panel-flash' : ''}`}
           style={{
             right: panelPos.right,
             top: panelPos.top,
@@ -171,9 +180,9 @@ export function FloatingWidget({
 
         {/* Pick Element */}
         <button
-          className={`qa-bar-btn ${isPicking ? 'active' : ''}`}
-          onClick={onPickElement}
-          title={isPicking ? 'Picking...' : 'Pick Element'}
+          className={`qa-bar-btn ${isPicking ? 'active' : ''} ${isPreviewMode ? 'disabled' : ''}`}
+          onClick={isPreviewMode ? flashPanel : onPickElement}
+          title={isPicking ? 'Picking...' : isPreviewMode ? 'Exit preview to pick elements' : 'Pick Element'}
         >
           {isPicking ? (
             <span className="qa-bar-dot" />
@@ -187,10 +196,10 @@ export function FloatingWidget({
 
         {/* Screenshot */}
         <button
-          className={`qa-bar-btn ${isCapturing ? 'active' : ''}`}
-          onClick={onScreenshot}
+          className={`qa-bar-btn ${isCapturing ? 'active' : ''} ${isPreviewMode ? 'disabled' : ''}`}
+          onClick={isPreviewMode ? flashPanel : onScreenshot}
           disabled={isCapturing}
-          title="Take Screenshot"
+          title={isPreviewMode ? 'Exit preview to take screenshots' : 'Take Screenshot'}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -200,9 +209,9 @@ export function FloatingWidget({
 
         {/* Record */}
         <button
-          className={`qa-bar-btn ${isRecording ? 'recording' : ''}`}
-          onClick={onRecordToggle}
-          title={isRecording ? 'Stop Recording' : 'Record Screen'}
+          className={`qa-bar-btn ${isRecording ? 'recording' : ''} ${isPreviewMode && !isRecording ? 'disabled' : ''}`}
+          onClick={isPreviewMode && !isRecording ? flashPanel : onRecordToggle}
+          title={isRecording ? 'Stop Recording' : isPreviewMode ? 'Exit preview to record' : 'Record Screen'}
         >
           {isRecording ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
