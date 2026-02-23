@@ -316,7 +316,7 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
 
 // ── GitHub Section ──
 function GithubSection() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [token, setToken] = useState('');
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
