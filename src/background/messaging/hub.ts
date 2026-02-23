@@ -1,4 +1,4 @@
-import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
+import type { ExtensionMessage, JiraSubmissionPayload, CDPStyleResult, CDPStyleRule } from '@/shared/types/messages';
 import { saveAndVerify, isAuthenticated, logout, getCredentials } from '../jira/auth';
 import {
   createIssue,
@@ -171,6 +171,21 @@ function handleContentPort(port: chrome.runtime.Port) {
         } catch (error) {
           console.error('Stop recording failed:', error);
           port.postMessage({ type: 'RECORDING_ERROR', error: (error as Error).message });
+        }
+        break;
+      }
+
+      case 'GET_ELEMENT_STYLES': {
+        try {
+          const styles = await getElementStylesViaCDP(tabId, message.selector);
+          port.postMessage({ type: 'ELEMENT_STYLES_RESULT', success: true, styles });
+        } catch (error) {
+          console.error('CDP CSS fetch failed:', error);
+          port.postMessage({
+            type: 'ELEMENT_STYLES_RESULT',
+            success: false,
+            error: (error as Error).message,
+          });
         }
         break;
       }
@@ -520,4 +535,103 @@ async function handleDryRunSubmission(
   });
 
   return { key: fakeKey };
+}
+
+/**
+ * Get element styles via Chrome DevTools Protocol (CDP)
+ * This provides accurate CSS information including shorthand properties
+ */
+async function getElementStylesViaCDP(tabId: number, selector: string): Promise<CDPStyleResult> {
+  const target = { tabId };
+
+  // Attach debugger
+  await chrome.debugger.attach(target, '1.3');
+
+  try {
+    // Enable CSS domain
+    await chrome.debugger.sendCommand(target, 'CSS.enable');
+    await chrome.debugger.sendCommand(target, 'DOM.enable');
+
+    // Get document root
+    const docResult = await chrome.debugger.sendCommand(target, 'DOM.getDocument') as {
+      root: { nodeId: number };
+    };
+
+    // Find element by selector
+    const queryResult = await chrome.debugger.sendCommand(target, 'DOM.querySelector', {
+      nodeId: docResult.root.nodeId,
+      selector,
+    }) as { nodeId: number };
+
+    if (!queryResult.nodeId) {
+      throw new Error(`Element not found: ${selector}`);
+    }
+
+    // Get matched styles
+    const stylesResult = await chrome.debugger.sendCommand(target, 'CSS.getMatchedStylesForNode', {
+      nodeId: queryResult.nodeId,
+    }) as {
+      inlineStyle?: {
+        cssProperties: Array<{ name: string; value: string; disabled?: boolean }>;
+      };
+      matchedCSSRules?: Array<{
+        rule: {
+          selectorList: { text: string };
+          origin: string;
+          style: {
+            cssProperties: Array<{ name: string; value: string; important?: boolean; disabled?: boolean }>;
+          };
+          styleSheetId?: string;
+        };
+      }>;
+    };
+
+    // Parse inline styles
+    const inlineStyles: Array<{ name: string; value: string }> = [];
+    if (stylesResult.inlineStyle?.cssProperties) {
+      for (const prop of stylesResult.inlineStyle.cssProperties) {
+        if (!prop.disabled && prop.value) {
+          inlineStyles.push({ name: prop.name, value: prop.value });
+        }
+      }
+    }
+
+    // Parse matched rules
+    const matchedRules: CDPStyleRule[] = [];
+    if (stylesResult.matchedCSSRules) {
+      for (const match of stylesResult.matchedCSSRules) {
+        const rule = match.rule;
+        // Skip user-agent styles
+        if (rule.origin === 'user-agent') continue;
+
+        const properties: Array<{ name: string; value: string; important: boolean }> = [];
+        for (const prop of rule.style.cssProperties) {
+          if (!prop.disabled && prop.value) {
+            properties.push({
+              name: prop.name,
+              value: prop.value,
+              important: prop.important ?? false,
+            });
+          }
+        }
+
+        if (properties.length > 0) {
+          matchedRules.push({
+            selector: rule.selectorList.text,
+            source: rule.origin === 'regular' ? 'stylesheet' : rule.origin,
+            properties,
+          });
+        }
+      }
+    }
+
+    return { inlineStyles, matchedRules };
+  } finally {
+    // Always detach debugger
+    try {
+      await chrome.debugger.detach(target);
+    } catch {
+      // Ignore detach errors
+    }
+  }
 }

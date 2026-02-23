@@ -54,7 +54,27 @@ export type ExtensionMessage =
   | { type: 'FETCH_JIRA_ISSUE_TYPES'; projectKey: string }
   | { type: 'FETCH_JIRA_STATUSES'; projectKey: string }
   | { type: 'FETCH_JIRA_EPICS'; projectKey: string }
-  | { type: 'SEARCH_JIRA_ISSUES'; projectKey: string; query: string };
+  | { type: 'SEARCH_JIRA_ISSUES'; projectKey: string; query: string }
+
+  // CDP CSS inspection
+  | { type: 'GET_ELEMENT_STYLES'; selector: string }
+  | { type: 'ELEMENT_STYLES_RESULT'; success: boolean; styles?: CDPStyleResult; error?: string };
+
+// CDP CSS result structure
+export interface CDPStyleRule {
+  selector: string;
+  source: string;
+  properties: Array<{
+    name: string;
+    value: string;
+    important: boolean;
+  }>;
+}
+
+export interface CDPStyleResult {
+  inlineStyles: Array<{ name: string; value: string }>;
+  matchedRules: CDPStyleRule[];
+}
 
 export interface JiraSubmissionPayload {
   changes: CSSChange[];

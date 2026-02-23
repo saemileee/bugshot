@@ -40,6 +40,7 @@ export default defineManifest({
     'storage',
     'offscreen',
     'alarms',
+    'debugger',
   ],
 
   host_permissions: [

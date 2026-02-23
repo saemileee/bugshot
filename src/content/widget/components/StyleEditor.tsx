@@ -2,10 +2,89 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { PropertyValueInput } from './PropertyValueInput';
 import { PropertyNameInput } from './PropertyNameInput';
 import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
+import type { CDPStyleResult } from '@/shared/types/messages';
 
 interface StyleEditorProps {
   element: Element;
   selector: string;
+}
+
+/* ── Fetch styles via CDP (Chrome DevTools Protocol) ── */
+
+async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: 'GET_ELEMENT_STYLES', selector },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[StyleEditor] CDP fetch failed:', chrome.runtime.lastError.message);
+          resolve(null);
+          return;
+        }
+        if (response?.success && response.styles) {
+          resolve(response.styles as CDPStyleResult);
+        } else {
+          console.warn('[StyleEditor] CDP fetch failed:', response?.error);
+          resolve(null);
+        }
+      }
+    );
+  });
+}
+
+function convertCDPToBlocks(cdpResult: CDPStyleResult): StyleRuleBlock[] {
+  const blocks: StyleRuleBlock[] = [];
+  let blockId = 0;
+
+  // Inline styles
+  const inlineProps: RuleProperty[] = cdpResult.inlineStyles.map((s) => ({
+    property: s.name,
+    value: s.value,
+    priority: '',
+    overridden: false,
+  }));
+  blocks.push({
+    id: `block-${blockId++}`,
+    selector: 'element.style',
+    source: '',
+    properties: inlineProps,
+    isInline: true,
+  });
+
+  // Matched rules (CDP returns them in order, last = highest specificity)
+  for (const rule of cdpResult.matchedRules.slice().reverse()) {
+    const props: RuleProperty[] = rule.properties.map((p) => ({
+      property: p.name,
+      value: p.value,
+      priority: p.important ? 'important' : '',
+      overridden: false,
+    }));
+
+    blocks.push({
+      id: `block-${blockId++}`,
+      selector: rule.selector,
+      source: rule.source,
+      properties: props,
+      isInline: false,
+    });
+  }
+
+  // Mark overridden properties
+  const winner = new Map<string, string>();
+  for (const block of blocks) {
+    for (const p of block.properties) {
+      if (!winner.has(p.property) || block.isInline || p.priority === 'important') {
+        winner.set(p.property, block.id);
+      }
+    }
+  }
+  for (const block of blocks) {
+    for (const p of block.properties) {
+      p.overridden = winner.get(p.property) !== block.id;
+    }
+  }
+
+  return blocks;
 }
 
 interface RuleProperty {
@@ -210,13 +289,14 @@ function getComputedBlock(el: Element): StyleRuleBlock {
 
 /* ── Component ── */
 
-export function StyleEditor({ element }: StyleEditorProps) {
+export function StyleEditor({ element, selector }: StyleEditorProps) {
   const [className, setClassName] = useState('');
   const [textContent, setTextContent] = useState('');
   const [blocks, setBlocks] = useState<StyleRuleBlock[]>([]);
   const [addingToBlock, setAddingToBlock] = useState<string | null>(null);
   const [newPropName, setNewPropName] = useState('');
   const [newPropValue, setNewPropValue] = useState('');
+  const [cdpSource, setCdpSource] = useState(false);
   const htmlEl = useRef<HTMLElement | null>(null);
   const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
 
@@ -235,13 +315,34 @@ export function StyleEditor({ element }: StyleEditorProps) {
     }
     setTextContent(directText.trim());
 
-    const collected = collectRuleBlocks(element);
-    // If only inline block found (no rule blocks), add computed fallback
-    if (collected.length <= 1) {
-      collected.push(getComputedBlock(element));
-    }
-    setBlocks(collected);
-  }, [element]);
+    // Try CDP first, fallback to direct DOM access
+    let cancelled = false;
+    (async () => {
+      if (selector) {
+        const cdpResult = await fetchStylesViaCDP(selector);
+        if (!cancelled && cdpResult) {
+          const cdpBlocks = convertCDPToBlocks(cdpResult);
+          if (cdpBlocks.length > 1 || cdpBlocks[0].properties.length > 0) {
+            setBlocks(cdpBlocks);
+            setCdpSource(true);
+            return;
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      // Fallback to direct DOM access
+      const collected = collectRuleBlocks(element);
+      if (collected.length <= 1) {
+        collected.push(getComputedBlock(element));
+      }
+      setBlocks(collected);
+      setCdpSource(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, [element, selector]);
 
   const handleClassNameChange = useCallback((val: string) => {
     setClassName(val);
@@ -335,7 +436,9 @@ export function StyleEditor({ element }: StyleEditorProps) {
       {/* Filter bar */}
       <div className="qa-sp-bar">
         <span>{ruleCount} matched rule{ruleCount !== 1 ? 's' : ''}</span>
-        <span>{document.styleSheets.length} stylesheet{document.styleSheets.length !== 1 ? 's' : ''}</span>
+        <span>
+          {cdpSource ? 'CDP' : `${document.styleSheets.length} stylesheet${document.styleSheets.length !== 1 ? 's' : ''}`}
+        </span>
       </div>
 
       {/* Rule blocks */}
