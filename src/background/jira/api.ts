@@ -41,17 +41,39 @@ export async function createIssue(
   payload: JiraIssuePayload,
 ): Promise<JiraIssueResponse> {
   return withRetry(async () => {
+    // Build the fields object
+    const fields: Record<string, unknown> = {
+      project: { key: payload.projectKey },
+      issuetype: { name: payload.issueType || 'Task' },
+      summary: payload.summary,
+      description: payload.description,
+    };
+
+    // Handle parent linking
+    if (payload.parentKey) {
+      // Check if parent is an Epic
+      const parentType = await getIssueType(payload.parentKey);
+      const isParentEpic = parentType?.toLowerCase() === 'epic';
+
+      if (isParentEpic) {
+        // For Epics, try to use Epic Link field first (classic projects)
+        const epicLinkFieldId = await getEpicLinkFieldId(payload.projectKey);
+        if (epicLinkFieldId) {
+          // Use Epic Link custom field
+          fields[epicLinkFieldId] = payload.parentKey;
+        } else {
+          // Fallback to parent field (team-managed projects)
+          fields.parent = { key: payload.parentKey };
+        }
+      } else {
+        // For non-Epic parents (subtasks or team-managed hierarchy)
+        fields.parent = { key: payload.parentKey };
+      }
+    }
+
     const response = await jiraFetch('/rest/api/3/issue', {
       method: 'POST',
-      body: JSON.stringify({
-        fields: {
-          project: { key: payload.projectKey },
-          issuetype: { name: payload.issueType || 'Task' },
-          summary: payload.summary,
-          description: payload.description,
-          ...(payload.parentKey ? { parent: { key: payload.parentKey } } : {}),
-        },
-      }),
+      body: JSON.stringify({ fields }),
     });
 
     return response.json() as Promise<JiraIssueResponse>;
@@ -200,6 +222,57 @@ export interface JiraSearchResult {
   summary: string;
   issueType: string;
   status: string;
+}
+
+/**
+ * Get the Epic Link custom field ID for a project.
+ * In company-managed projects, Epic linking uses a custom field (usually customfield_10014).
+ * Returns null if not found or in team-managed projects.
+ */
+export async function getEpicLinkFieldId(projectKey: string): Promise<string | null> {
+  try {
+    const response = await jiraFetch(
+      `/rest/api/3/issue/createmeta?projectKeys=${projectKey}&expand=projects.issuetypes.fields`,
+    );
+    const data = await response.json();
+
+    // Search through all issue types for Epic Link field
+    for (const project of data.projects || []) {
+      for (const issueType of project.issuetypes || []) {
+        const fields = issueType.fields || {};
+        for (const [fieldId, fieldDef] of Object.entries(fields)) {
+          const def = fieldDef as Record<string, unknown>;
+          // Epic Link field has specific schema
+          if (
+            def.name === 'Epic Link' ||
+            def.name === '에픽 링크' ||
+            (def.schema as Record<string, unknown>)?.custom === 'com.pyxis.greenhopper.jira:gh-epic-link'
+          ) {
+            return fieldId;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Jira] Failed to get Epic Link field:', err);
+  }
+  return null;
+}
+
+/**
+ * Get the issue type of a specific issue.
+ */
+export async function getIssueType(issueKey: string): Promise<string | null> {
+  try {
+    const response = await jiraFetch(
+      `/rest/api/3/issue/${issueKey}?fields=issuetype`,
+    );
+    const data = await response.json();
+    return (data.fields?.issuetype?.name as string) || null;
+  } catch (err) {
+    console.warn('[Jira] Failed to get issue type:', err);
+    return null;
+  }
 }
 
 export async function searchIssues(
