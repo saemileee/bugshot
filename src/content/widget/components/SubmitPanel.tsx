@@ -204,11 +204,24 @@ export function SubmitPanel({
       setEditSummary(generatePreviewSummary(changes, prefix));
     });
 
-    // Load Jira project key for options
-    chrome.storage.sync.get(STORAGE_KEYS.EPIC_CONFIG, (result) => {
-      const config = result[STORAGE_KEYS.EPIC_CONFIG];
-      if (config?.projectKey) {
-        loadJiraOptions(config.projectKey);
+    // Load Jira project key for options - check both legacy and new storage
+    chrome.storage.sync.get([STORAGE_KEYS.EPIC_CONFIG, STORAGE_KEYS.INTEGRATIONS], (result) => {
+      const legacyConfig = result[STORAGE_KEYS.EPIC_CONFIG];
+      const integrations = result[STORAGE_KEYS.INTEGRATIONS] as Record<string, { settings?: { projectKey?: string } }> | undefined;
+      const jiraIntegration = integrations?.jira;
+
+      // Try legacy config first, then fall back to new integration config
+      const projectKey = legacyConfig?.projectKey || jiraIntegration?.settings?.projectKey;
+
+      console.log('[SubmitPanel] EPIC_CONFIG:', legacyConfig);
+      console.log('[SubmitPanel] INTEGRATIONS.jira:', jiraIntegration);
+      console.log('[SubmitPanel] Resolved projectKey:', projectKey);
+
+      if (projectKey) {
+        console.log('[SubmitPanel] Loading Jira options for project:', projectKey);
+        loadJiraOptions(projectKey);
+      } else {
+        console.log('[SubmitPanel] No projectKey configured, skipping Jira options load');
       }
     });
 
@@ -373,21 +386,27 @@ export function SubmitPanel({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4" style={{ padding: '0 16px', paddingTop: 12 }}>
-        <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Ticket Preview</h3>
-        <div className="flex items-center gap-1">
-          <button
-            className={`qa-btn ${copied ? 'qa-btn-success' : 'qa-btn-ghost'}`}
-            onClick={handleCopy}
-          >
-            {copied ? 'Copied!' : 'Copy'}
+      <div className="qa-page-title" style={{ paddingBottom: 0 }}>
+        <span className="qa-page-title-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </span>
+        Preview & Submit
+      </div>
+      <div className="flex items-center justify-end gap-1" style={{ padding: '8px 16px 12px' }}>
+        <button
+          className={`qa-btn ${copied ? 'qa-btn-success' : 'qa-btn-ghost'}`}
+          onClick={handleCopy}
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+        {onBack && (
+          <button className="qa-btn qa-btn-ghost" onClick={onBack}>
+            Back
           </button>
-          {onBack && (
-            <button className="qa-btn qa-btn-ghost" onClick={onBack}>
-              Back
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       <div style={{ padding: '0 16px' }}>
@@ -643,18 +662,30 @@ export function SubmitPanel({
           </div>
         )}
 
-        {/* Submit button */}
-        {!allSuccess && !legacyResult?.success && (
+      </div>
+
+      {/* Fixed Submit button at bottom */}
+      {!allSuccess && !legacyResult?.success && (
+        <div className="qa-submit-fixed-footer">
           <button
             className="qa-btn qa-btn-primary qa-btn-block qa-btn-lg"
             onClick={handleSubmit}
             disabled={isSubmitting || !editSummary.trim()}
-            style={{ marginBottom: 16 }}
           >
-            {isSubmitting ? 'Submitting...' : submitLabel}
+            {isSubmitting ? (
+              'Submitting...'
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                </svg>
+                {submitLabel}
+              </>
+            )}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

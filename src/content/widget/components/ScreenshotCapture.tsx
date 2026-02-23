@@ -14,7 +14,6 @@ export function ScreenshotCapture({
   editingIndex,
   onEditingChange,
   onUpdated,
-  onRemove,
 }: ScreenshotCaptureProps) {
 
   const handleAnnotationSave = (annotatedDataUrl: string) => {
@@ -28,7 +27,7 @@ export function ScreenshotCapture({
     onEditingChange(null);
   };
 
-  // Annotation mode
+  // Only render annotation mode
   if (editingIndex !== null && screenshots[editingIndex]) {
     return (
       <AnnotationCanvas
@@ -39,38 +38,5 @@ export function ScreenshotCapture({
     );
   }
 
-  if (screenshots.length === 0) {
-    return (
-      <div className="qa-empty-hint">
-        Use the toolbar to capture screenshots
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {screenshots.map((ss, i) => (
-        <div key={i} className="qa-screenshot-container">
-          <img src={ss.annotated || ss.original} alt={`Screenshot ${i + 1}`} />
-          <div
-            className="flex gap-1 p-1.5"
-            style={{ background: 'rgba(0,0,0,0.03)' }}
-          >
-            <button
-              className="qa-btn qa-btn-secondary flex-1"
-              onClick={() => onEditingChange(i)}
-            >
-              Annotate
-            </button>
-            <button
-              className="qa-btn qa-btn-danger"
-              onClick={() => onRemove(i)}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return null;
 }

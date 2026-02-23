@@ -218,15 +218,21 @@ export async function fetchStatuses(projectKey: string): Promise<JiraStatus[]> {
 }
 
 export async function fetchEpics(projectKey: string): Promise<JiraEpic[]> {
+  if (!projectKey) {
+    console.warn('[Jira] fetchEpics called without projectKey');
+    return [];
+  }
+
   try {
     const jql = encodeURIComponent(
       `project = "${projectKey}" AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`,
     );
-    console.log('[Jira] Fetching epics for project:', projectKey);
+    console.log('[Jira] Fetching epics for project:', projectKey, 'JQL:', decodeURIComponent(jql));
     const response = await jiraFetch(
       `/rest/api/3/search?jql=${jql}&maxResults=50&fields=summary,status`,
     );
     const data = await response.json();
+    console.log('[Jira] Epics raw response:', JSON.stringify(data).slice(0, 500));
     console.log('[Jira] Epics response:', data.issues?.length || 0, 'epics found');
     return (data.issues || []).map((i: Record<string, unknown>) => {
       const fields = i.fields as Record<string, unknown>;

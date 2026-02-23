@@ -1,4 +1,3 @@
-import { useState, useRef, useCallback } from 'react';
 import type { CSSChange, CSSPropertyChange } from '@/shared/types/css-change';
 import type { CaptureStatus } from '../hooks/useContentCSSTracking';
 
@@ -6,7 +5,6 @@ interface ChangesViewProps {
   changes: CSSChange[];
   captureStatus: CaptureStatus;
   onRemoveChange: (id: string) => void;
-  onClearChanges: () => void;
 }
 
 const SPECIAL_PROPS = new Set(['className', 'textContent']);
@@ -27,22 +25,7 @@ export function ChangesSummary({
   changes,
   captureStatus,
   onRemoveChange,
-  onClearChanges,
 }: ChangesViewProps) {
-  const [clearConfirm, setClearConfirm] = useState(false);
-  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleClearAll = useCallback(() => {
-    if (!clearConfirm) {
-      setClearConfirm(true);
-      clearTimer.current = setTimeout(() => setClearConfirm(false), 2000);
-      return;
-    }
-    if (clearTimer.current) clearTimeout(clearTimer.current);
-    setClearConfirm(false);
-    onClearChanges();
-  }, [clearConfirm, onClearChanges]);
-
   return (
     <div>
       {/* ── Brief status (only errors/warnings) ── */}
@@ -64,26 +47,14 @@ export function ChangesSummary({
 
       {/* ── Empty state ── */}
       {changes.length === 0 && captureStatus.state === 'idle' && (
-        <div className="qa-empty-hint">
-          Pick an element from the toolbar to start
+        <div className="qa-empty-hint-compact">
+          Pick an element from toolbar to edit styles
         </div>
       )}
 
       {/* ── Change list ── */}
       {changes.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span className="qa-change-badge">
-              {changes.length} change{changes.length !== 1 ? 's' : ''}
-            </span>
-            <button
-              className={`qa-btn qa-btn-ghost ${clearConfirm ? 'qa-btn-clear-confirm' : ''}`}
-              onClick={handleClearAll}
-            >
-              {clearConfirm ? 'Clear All?' : 'Clear All'}
-            </button>
-          </div>
-
           {changes.map((change) => {
             const { meta, tokens, styles } = classifyProps(change.properties);
             return (
@@ -91,11 +62,14 @@ export function ChangesSummary({
                 <div className="qa-change-card-header">
                   <code className="qa-change-card-selector">{change.selector}</code>
                   <button
-                    className="qa-change-card-remove"
+                    className="qa-remove-btn"
                     onClick={() => onRemoveChange(change.id)}
                     title="Remove"
                   >
-                    &times;
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
                   </button>
                 </div>
 
