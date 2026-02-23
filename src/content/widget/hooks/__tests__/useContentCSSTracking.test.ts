@@ -263,6 +263,72 @@ describe('useContentCSSTracking', () => {
     });
   });
 
+  describe('interactive pseudo-class filtering', () => {
+    it('should not show false positive when element has focus state styles', () => {
+      // This test verifies that :focus, :hover rules are filtered out
+      // In jsdom, we can't fully simulate CSS rule matching, but we can verify
+      // that an element with no actual changes reports no diff
+      const inputElement = document.createElement('input');
+      inputElement.type = 'text';
+      inputElement.style.backgroundColor = 'white';
+      document.body.appendChild(inputElement);
+
+      const { result } = renderHook(() => useContentCSSTracking());
+
+      act(() => {
+        result.current.captureBefore(inputElement);
+      });
+
+      // Focus the element (would normally trigger :focus styles)
+      inputElement.focus();
+
+      // Capture after without actual style changes
+      let change: ReturnType<typeof result.current.captureAfter>;
+      act(() => {
+        change = result.current.captureAfter();
+      });
+
+      // Should detect no diff because :focus rules are filtered
+      expect(change).toBeNull();
+      expect(result.current.status.state).toBe('no_diff');
+
+      inputElement.remove();
+    });
+
+    it('should detect real style changes even with interactive state', () => {
+      const buttonElement = document.createElement('button');
+      buttonElement.style.backgroundColor = 'blue';
+      document.body.appendChild(buttonElement);
+
+      const { result } = renderHook(() => useContentCSSTracking());
+
+      act(() => {
+        result.current.captureBefore(buttonElement);
+      });
+
+      // Make an actual style change
+      buttonElement.style.backgroundColor = 'red';
+
+      let change: ReturnType<typeof result.current.captureAfter>;
+      act(() => {
+        change = result.current.captureAfter();
+      });
+
+      // Should detect the real change
+      expect(change).not.toBeNull();
+      expect(result.current.status.state).toBe('success');
+      expect(change?.properties).toContainEqual(
+        expect.objectContaining({
+          property: 'background-color',
+          asIs: 'blue',
+          toBe: 'red',
+        })
+      );
+
+      buttonElement.remove();
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle element removed from DOM', () => {
       const { result } = renderHook(() => useContentCSSTracking());

@@ -11,6 +11,30 @@ export type CaptureStatus =
 
 // ── Helpers ──────────────────────────────────────────
 
+/**
+ * Interactive pseudo-classes that can cause false positive diffs.
+ * These are state-dependent and should be excluded from snapshot comparison.
+ */
+const INTERACTIVE_PSEUDO_CLASSES = [
+  ':hover',
+  ':focus',
+  ':focus-within',
+  ':focus-visible',
+  ':active',
+  ':visited',
+];
+
+/**
+ * Check if a CSS selector contains interactive pseudo-classes.
+ * These selectors apply styles based on user interaction state (hover, focus, etc.)
+ * and should be excluded to avoid false positive diffs.
+ */
+function hasInteractivePseudoClass(selector: string): boolean {
+  const lowerSelector = selector.toLowerCase();
+  return INTERACTIVE_PSEUDO_CLASSES.some((pseudo) => lowerSelector.includes(pseudo));
+}
+
+
 function buildSelector(el: Element): string {
   const parts: string[] = [];
   let current: Element | null = el;
@@ -53,6 +77,12 @@ function captureSnapshot(el: Element): ElementStyleSnapshot {
       const styleRule = rule as CSSStyleRule;
       if (styleRule.selectorText && styleRule.style) {
         try {
+          // Skip rules with interactive pseudo-classes (:hover, :focus, etc.)
+          // These cause false positive diffs based on user interaction state
+          if (hasInteractivePseudoClass(styleRule.selectorText)) {
+            continue;
+          }
+
           if (el.matches(styleRule.selectorText)) {
             for (let p = 0; p < styleRule.style.length; p++) {
               const prop = styleRule.style.item(p);
