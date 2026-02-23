@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { STORAGE_KEYS } from '@/shared/constants';
 import type { EpicConfig } from '@/shared/types/jira-ticket';
 
 interface JiraProject { id: string; key: string; name: string }
 interface JiraIssueType { id: string; name: string; subtask: boolean }
-interface JiraSearchResult { key: string; summary: string; issueType: string; status: string }
 
 function sendMsg(message: object): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -29,13 +28,6 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const [parentQuery, setParentQuery] = useState('');
-  const [parentResults, setParentResults] = useState<JiraSearchResult[]>([]);
-  const [parentSearching, setParentSearching] = useState(false);
-  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const parentFieldRef = useRef<HTMLDivElement>(null);
-
   const [config, setConfig] = useState<EpicConfig>({
     projectKey: '', projectName: '', issueType: 'Task', parentKey: '', parentSummary: '',
   });
@@ -51,21 +43,6 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
       if (result[STORAGE_KEYS.EPIC_CONFIG]) setConfig((p) => ({ ...p, ...result[STORAGE_KEYS.EPIC_CONFIG] }));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (parentFieldRef.current && !parentFieldRef.current.contains(e.target as Node)) setParentDropdownOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  // Cleanup search timer on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    };
   }, []);
 
   const loadProjects = useCallback(async () => {
@@ -93,22 +70,6 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
     if (authStatus.authenticated && config.projectKey && projects.length > 0) loadProjectDetails(config.projectKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus.authenticated, config.projectKey, projects.length]);
-
-  const handleParentSearch = useCallback((query: string) => {
-    setParentQuery(query);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!query.trim() || !config.projectKey) { setParentResults([]); setParentDropdownOpen(false); return; }
-    searchTimerRef.current = setTimeout(async () => {
-      setParentSearching(true);
-      try {
-        const res = await sendMsg({ type: 'SEARCH_JIRA_ISSUES', projectKey: config.projectKey, query: query.trim() });
-        if (res.success) { setParentResults(res.data as JiraSearchResult[]); setParentDropdownOpen(true); }
-      } finally { setParentSearching(false); }
-    }, 400);
-  }, [config.projectKey]);
-
-  const selectedType = issueTypes.find((t) => t.name === config.issueType);
-  const isSubtask = selectedType?.subtask ?? false;
 
   const handleConnect = useCallback(() => {
     if (!siteUrl.trim() || !email.trim() || !apiToken.trim()) { setAuthError('All fields are required'); return; }
@@ -147,18 +108,8 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
   const handleProjectChange = useCallback((key: string) => {
     const proj = projects.find((p) => p.key === key);
     setConfig((prev) => ({ ...prev, projectKey: key, projectName: proj?.name || '', issueType: 'Task', parentKey: '', parentSummary: '' }));
-    setParentQuery(''); setParentResults([]);
     if (key) loadProjectDetails(key);
   }, [projects, loadProjectDetails]);
-
-  const handleSelectParent = useCallback((issue: JiraSearchResult) => {
-    setConfig((prev) => ({ ...prev, parentKey: issue.key, parentSummary: issue.summary }));
-    setParentQuery(''); setParentDropdownOpen(false); setParentResults([]);
-  }, []);
-
-  const handleClearParent = useCallback(() => {
-    setConfig((prev) => ({ ...prev, parentKey: '', parentSummary: '' }));
-  }, []);
 
   const handleSave = useCallback(() => {
     chrome.storage.sync.set({ [STORAGE_KEYS.EPIC_CONFIG]: config }, () => {
@@ -173,7 +124,6 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
           configs.jira.settings = {
             projectKey: config.projectKey,
             issueType: config.issueType,
-            parentKey: config.parentKey || '',
           };
           chrome.storage.sync.set({ [STORAGE_KEYS.INTEGRATIONS]: configs });
         }
@@ -229,45 +179,6 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
                     <select className="qa-settings-input" value={config.issueType} onChange={(e) => setConfig((prev) => ({ ...prev, issueType: e.target.value }))}>
                       {issueTypes.map((t) => <option key={t.id} value={t.name}>{t.name}{t.subtask ? ' (Sub-task)' : ''}</option>)}
                     </select>
-                  )}
-                  {isSubtask && !config.parentKey && <div className="qa-settings-field-hint qa-settings-field-hint-warn">Select a parent issue below</div>}
-                </div>
-              )}
-
-              {config.projectKey && (
-                <div className="qa-settings-field" ref={parentFieldRef}>
-                  <label className="qa-settings-label">
-                    Parent Issue <span className="qa-settings-hint">{isSubtask ? 'required' : 'optional'}</span>
-                  </label>
-                  {config.parentKey ? (
-                    <div className="qa-settings-parent-chip">
-                      <div className="qa-settings-parent-chip-info">
-                        <code className="qa-settings-parent-chip-key">{config.parentKey}</code>
-                        <span className="qa-settings-parent-chip-summary">{config.parentSummary}</span>
-                      </div>
-                      <button className="qa-btn qa-btn-ghost qa-settings-parent-chip-remove" onClick={handleClearParent} title="Remove">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="qa-settings-search-wrap">
-                      <input className="qa-settings-input" type="text" placeholder="Search by key or summary..." value={parentQuery} onChange={(e) => handleParentSearch(e.target.value)} onFocus={() => { if (parentResults.length > 0) setParentDropdownOpen(true); }} spellCheck={false} />
-                      {parentSearching && <span className="qa-settings-search-spinner" />}
-                      {parentDropdownOpen && parentResults.length > 0 && (
-                        <div className="qa-settings-search-dropdown">
-                          {parentResults.map((issue) => (
-                            <button key={issue.key} className="qa-settings-search-item" onClick={() => handleSelectParent(issue)}>
-                              <span className="qa-settings-search-item-key">{issue.key}</span>
-                              <span className="qa-settings-search-item-summary">{issue.summary}</span>
-                              <span className="qa-settings-search-item-meta">{issue.issueType} · {issue.status}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {parentDropdownOpen && !parentSearching && parentResults.length === 0 && parentQuery.trim() && (
-                        <div className="qa-settings-search-dropdown"><div className="qa-settings-search-empty">No results</div></div>
-                      )}
-                    </div>
                   )}
                 </div>
               )}

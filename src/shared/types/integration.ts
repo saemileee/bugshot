@@ -20,6 +20,7 @@ export interface IntegrationResult {
 export interface JiraSubmitOptions {
   assigneeId?: string;
   priorityId?: string;
+  epicKey?: string;
 }
 
 export interface GithubSubmitOptions {

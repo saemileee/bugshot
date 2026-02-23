@@ -79,7 +79,7 @@ export async function submitToJira(
       issueType: config.settings.issueType || 'Task',
       summary,
       description,
-      parentKey: config.settings.parentKey || undefined,
+      parentKey: payload.jiraOptions?.epicKey || config.settings.parentKey || undefined,
       assigneeId: payload.jiraOptions?.assigneeId,
       priorityId: payload.jiraOptions?.priorityId,
     });
