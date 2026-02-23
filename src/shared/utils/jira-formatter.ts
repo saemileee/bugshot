@@ -160,20 +160,15 @@ export function buildWikiMarkupDescription(
     const hasAsIs = screenshotFilenames.includes(asIsName);
     const hasToBe = screenshotFilenames.includes(toBeName);
 
-    if (hasAsIs) {
-      lines.push(`*As-Is:*`);
-      lines.push(`!${asIsName}|thumbnail!`);
+    // Screenshots table (As-Is / To-Be side by side)
+    if (hasAsIs || hasToBe) {
+      lines.push('||As-Is||To-Be||');
+      lines.push(`|${hasAsIs ? `!${asIsName}|width=400!` : ' '}|${hasToBe ? `!${toBeName}|width=400!` : ' '}|`);
       lines.push('');
     }
 
     if (change.description) {
       lines.push(`{quote}${change.description}{quote}`);
-      lines.push('');
-    }
-
-    if (hasToBe) {
-      lines.push(`*To-Be:*`);
-      lines.push(`!${toBeName}|thumbnail!`);
       lines.push('');
     }
 
@@ -192,7 +187,7 @@ export function buildWikiMarkupDescription(
     lines.push('h3. Screenshots');
     lines.push('');
     for (const name of manualScreenshots) {
-      lines.push(`!${name}|thumbnail!`);
+      lines.push(`!${name}|width=800!`);
     }
     lines.push('');
   }

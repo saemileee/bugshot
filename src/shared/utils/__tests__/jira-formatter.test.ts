@@ -112,10 +112,10 @@ describe('jira-formatter', () => {
       expect(result).toContain('|{{font-size}}|12px|14px|');
     });
 
-    it('should reference screenshots with thumbnail format', () => {
+    it('should reference screenshots with width format', () => {
       const result = buildWikiMarkupDescription(baseChangeSet, ['screenshot-123.png']);
       expect(result).toContain('h3. Screenshots');
-      expect(result).toContain('!screenshot-123.png|thumbnail!');
+      expect(result).toContain('!screenshot-123.png|width=800!');
     });
 
     it('should reference video with attachment link format', () => {
@@ -124,7 +124,7 @@ describe('jira-formatter', () => {
       expect(result).toContain('[^recording-456.webm]');
     });
 
-    it('should include As-Is and To-Be screenshots for element', () => {
+    it('should include As-Is and To-Be screenshots in a table', () => {
       const changeSet: ChangeSet = {
         ...baseChangeSet,
         changes: [{
@@ -141,10 +141,11 @@ describe('jira-formatter', () => {
         '_header-as-is.png',
         '_header-to-be.png',
       ]);
-      expect(result).toContain('*As-Is:*');
-      expect(result).toContain('!_header-as-is.png|thumbnail!');
-      expect(result).toContain('*To-Be:*');
-      expect(result).toContain('!_header-to-be.png|thumbnail!');
+      // Should have table header
+      expect(result).toContain('||As-Is||To-Be||');
+      // Should have both images in table row
+      expect(result).toContain('!_header-as-is.png|width=400!');
+      expect(result).toContain('!_header-to-be.png|width=400!');
     });
   });
 
