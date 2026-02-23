@@ -146,7 +146,7 @@ export function SubmitPanel({
   const [enabledIntegrations, setEnabledIntegrations] = useState<IntegrationId[]>([]);
 
   // Jira options state
-  const [jiraOptionsOpen, setJiraOptionsOpen] = useState(false);
+  const [jiraOptionsOpen, setJiraOptionsOpen] = useState(true);
   const [jiraAssignees, setJiraAssignees] = useState<JiraUser[]>([]);
   const [jiraPriorities, setJiraPriorities] = useState<JiraPriority[]>([]);
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
@@ -196,7 +196,28 @@ export function SubmitPanel({
         loadJiraOptions(config.projectKey);
       }
     });
+
+    // Load saved Jira submit options
+    chrome.storage.local.get(STORAGE_KEYS.JIRA_SUBMIT_OPTIONS, (result) => {
+      const opts = result[STORAGE_KEYS.JIRA_SUBMIT_OPTIONS];
+      if (opts) {
+        if (opts.assigneeId) setSelectedAssignee(opts.assigneeId);
+        if (opts.priorityId) setSelectedPriority(opts.priorityId);
+      }
+    });
   }, [changes, loadJiraOptions]);
+
+  // Save Jira options when they change
+  useEffect(() => {
+    if (selectedAssignee || selectedPriority) {
+      chrome.storage.local.set({
+        [STORAGE_KEYS.JIRA_SUBMIT_OPTIONS]: {
+          assigneeId: selectedAssignee,
+          priorityId: selectedPriority,
+        },
+      });
+    }
+  }, [selectedAssignee, selectedPriority]);
 
   const useMultiIntegration = enabledCount > 0;
 

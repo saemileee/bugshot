@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   WIDGET_VISIBLE: 'widgetVisible',
   // Title prefix (말머리)
   TITLE_PREFIX: 'titlePrefix',
+  // Jira submit options (assignee, priority)
+  JIRA_SUBMIT_OPTIONS: 'jiraSubmitOptions',
 } as const;
 
 // Default CSS properties to track (design-relevant)

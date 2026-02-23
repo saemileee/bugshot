@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 export interface SelectOption {
   value: string;
@@ -26,7 +26,6 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find((o) => o.value === value);
@@ -37,22 +36,15 @@ export function SearchableSelect({
     o.subLabel?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setSearch('');
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
   const handleOpen = useCallback(() => {
     setIsOpen(true);
     setSearch('');
     setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    setSearch('');
   }, []);
 
   const handleSelect = useCallback((optionValue: string) => {
@@ -63,15 +55,22 @@ export function SearchableSelect({
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      setIsOpen(false);
-      setSearch('');
+      handleClose();
     } else if (e.key === 'Enter' && filteredOptions.length > 0) {
       handleSelect(filteredOptions[0].value);
     }
-  }, [filteredOptions, handleSelect]);
+  }, [filteredOptions, handleSelect, handleClose]);
 
   return (
-    <div className="qa-searchable-select" ref={containerRef}>
+    <div className="qa-searchable-select">
+      {/* Backdrop for closing dropdown */}
+      {isOpen && (
+        <div
+          className="qa-searchable-select-backdrop"
+          onClick={handleClose}
+        />
+      )}
+
       {/* Display selected value or trigger */}
       {!isOpen ? (
         <button
