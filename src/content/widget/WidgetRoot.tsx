@@ -54,12 +54,16 @@ export function WidgetRoot() {
 
   // ── Data state ──
   const [screenshots, setScreenshots] = useState<ScreenshotData[]>([]);
+  const [annotatingIndex, setAnnotatingIndex] = useState<number | null>(null);
   const [description, setDescription] = useState('');
   const [changes, setChanges] = useState<CSSChange[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [conversionProgress, setConversionProgress] = useState<{ progress: number; message: string } | null>(null);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [recordingDataUrl, setRecordingDataUrl] = useState<string | null>(null);
   const [recordingSize, setRecordingSize] = useState<number | null>(null);
+  const [recordingMimeType, setRecordingMimeType] = useState<string | null>(null);
   const [editNote, setEditNote] = useState('');
   const [recordError, setRecordError] = useState<string | null>(null);
 
@@ -69,12 +73,26 @@ export function WidgetRoot() {
       setRecordingId(msg.recordingId);
       setRecordingDataUrl(msg.dataUrl ?? null);
       setRecordingSize(msg.size ?? null);
+      setRecordingMimeType(msg.mimeType ?? null);
       setIsRecording(false);
+      setIsConverting(false);
+      setConversionProgress(null);
       setActiveTab('changes');
     }
     if (msg.type === 'RECORDING_ERROR') {
       setIsRecording(false);
+      setIsConverting(false);
+      setConversionProgress(null);
       setRecordError(msg.error);
+    }
+    if (msg.type === 'CONVERSION_PROGRESS') {
+      if (msg.stage === 'loading' || msg.stage === 'converting') {
+        setIsConverting(true);
+        setConversionProgress({ progress: msg.progress, message: msg.message });
+      } else if (msg.stage === 'error') {
+        setIsConverting(false);
+        setConversionProgress(null);
+      }
     }
   }, []);
 
@@ -130,11 +148,15 @@ export function WidgetRoot() {
 
   // ── Toolbar actions ──
   const handleStartPicking = useCallback(() => {
+    // If annotating, cancel annotation first
+    if (annotatingIndex !== null) {
+      setAnnotatingIndex(null);
+    }
     beforeScreenshotRef.current = null;
     tracking.reset();
     picker.clearPicked();
     picker.startPicking();
-  }, [tracking, picker]);
+  }, [tracking, picker, annotatingIndex]);
 
   const handleToolbarScreenshot = useCallback(async () => {
     setIsCapturing(true);
@@ -237,11 +259,15 @@ export function WidgetRoot() {
   // ── Submit ──
   const handleSubmitSuccess = useCallback(() => {
     setScreenshots([]);
+    setAnnotatingIndex(null);
     setDescription('');
     setChanges([]);
     setRecordingId(null);
     setRecordingDataUrl(null);
     setRecordingSize(null);
+    setRecordingMimeType(null);
+    setIsConverting(false);
+    setConversionProgress(null);
     setShowPreview(false);
   }, []);
 
@@ -313,6 +339,8 @@ export function WidgetRoot() {
             onSuccess={handleSubmitSuccess}
             onBack={() => setShowPreview(false)}
             videoRecordingId={recordingId}
+            videoDataUrl={recordingDataUrl}
+            videoMimeType={recordingMimeType}
             isPreview
           />
         );
@@ -364,10 +392,12 @@ export function WidgetRoot() {
                 </h3>
                 <ScreenshotCapture
                   screenshots={screenshots}
+                  editingIndex={annotatingIndex}
+                  onEditingChange={setAnnotatingIndex}
                   onUpdated={handleScreenshotUpdated}
                   onRemove={handleRemoveScreenshot}
                 />
-                {(recordingId || isRecording || recordError) && (
+                {(recordingId || isRecording || isConverting || recordError) && (
                   <div style={{ marginTop: 12 }}>
                     {recordError && (
                       <div className="qa-status qa-status-error">
@@ -385,6 +415,24 @@ export function WidgetRoot() {
                       <div className="qa-status qa-status-error">
                         <span className="qa-recording-dot" />
                         <span>Recording in progress...</span>
+                      </div>
+                    )}
+                    {isConverting && conversionProgress && (
+                      <div className="qa-status qa-status-info">
+                        <div style={{ flex: 1 }}>
+                          <div style={{ marginBottom: 4 }}>{conversionProgress.message}</div>
+                          <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                height: '100%',
+                                width: `${conversionProgress.progress}%`,
+                                background: '#3b82f6',
+                                borderRadius: 2,
+                                transition: 'width 0.3s',
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                     {recordingId && !isRecording && (

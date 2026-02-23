@@ -64,7 +64,9 @@ export async function submitToJira(
     const allFilenames = payload.screenshots.map((s) => s.filename);
     let videoFilename: string | undefined;
     if (payload.videoRecordingId) {
-      videoFilename = `recording-${Date.now()}.webm`;
+      // Determine extension from mimeType
+      const ext = payload.videoMimeType?.includes('mp4') ? 'mp4' : 'webm';
+      videoFilename = `recording-${Date.now()}.${ext}`;
       allFilenames.push(videoFilename);
     }
 

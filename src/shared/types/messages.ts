@@ -12,7 +12,8 @@ export type ExtensionMessage =
   | { type: 'RECORDING_STARTED' }
   | { type: 'RECORDING_STOPPED' }
   | { type: 'RECORDING_ERROR'; error: string }
-  | { type: 'RECORDING_COMPLETE'; recordingId: string; dataUrl?: string; size?: number }
+  | { type: 'RECORDING_COMPLETE'; recordingId: string; dataUrl?: string; size?: number; mimeType?: string }
+  | { type: 'CONVERSION_PROGRESS'; stage: 'loading' | 'converting' | 'done' | 'error'; progress: number; message: string }
 
   // Jira Submission (legacy, still supported)
   | { type: 'SUBMIT_TO_JIRA'; payload: JiraSubmissionPayload }

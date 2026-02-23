@@ -1,6 +1,8 @@
 // Offscreen document for video recording via MediaRecorder
 // This document has full DOM access and survives service worker suspension
 
+import { convertWebmToMp4, type ConversionProgress } from './video-converter';
+
 let recorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let stream: MediaStream | null = null;
@@ -79,21 +81,43 @@ async function startRecording() {
   };
 
   recorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
+    const webmBlob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
     chunks = [];
 
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
 
-    const recordingId = await storeRecording(blob);
+    // Send progress updates
+    const sendProgress = (progress: ConversionProgress) => {
+      chrome.runtime.sendMessage({
+        type: 'conversion-progress',
+        target: 'service-worker',
+        ...progress,
+      });
+    };
+
+    // Convert webm to mp4
+    let finalBlob: Blob;
+    let mimeType: string;
+    try {
+      sendProgress({ stage: 'loading', progress: 0, message: 'Preparing converter...' });
+      finalBlob = await convertWebmToMp4(webmBlob, sendProgress);
+      mimeType = 'video/mp4';
+    } catch (err) {
+      console.warn('MP4 conversion failed, using webm:', err);
+      finalBlob = webmBlob;
+      mimeType = webmBlob.type;
+    }
+
+    const recordingId = await storeRecording(finalBlob);
 
     // Convert to data URL for preview (skip if > 50MB)
     let dataUrl: string | undefined;
-    if (blob.size < 50_000_000) {
+    if (finalBlob.size < 50_000_000) {
       dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
+        reader.readAsDataURL(finalBlob);
       });
     }
 
@@ -101,8 +125,8 @@ async function startRecording() {
       type: 'recording-complete',
       target: 'service-worker',
       recordingId,
-      size: blob.size,
-      mimeType: blob.type,
+      size: finalBlob.size,
+      mimeType,
       dataUrl,
     });
   };
@@ -126,7 +150,11 @@ function stopRecording() {
 }
 
 function getSupportedMimeType(): string {
+  // Try mp4 first (Safari supports, Chrome usually doesn't)
+  // Then fall back to webm
   const types = [
+    'video/mp4;codecs=h264',
+    'video/mp4',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm',

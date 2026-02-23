@@ -52,6 +52,7 @@ export function initializeMessagingHub() {
           recordingId: message.recordingId,
           dataUrl: message.dataUrl,
           size: message.size,
+          mimeType: message.mimeType,
         });
       }
       return false;
@@ -63,6 +64,19 @@ export function initializeMessagingHub() {
         port.postMessage({
           type: 'RECORDING_ERROR',
           error: message.error || 'Recording failed',
+        });
+      }
+      return false;
+    }
+
+    // Route conversion progress from offscreen → content port
+    if (message.type === 'conversion-progress' && message.target === 'service-worker') {
+      for (const [, port] of contentPorts) {
+        port.postMessage({
+          type: 'CONVERSION_PROGRESS',
+          stage: message.stage,
+          progress: message.progress,
+          message: message.message,
         });
       }
       return false;

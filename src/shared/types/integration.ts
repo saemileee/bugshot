@@ -33,6 +33,7 @@ export interface SubmissionPayload {
   manualNotes?: string;
   screenshots: Array<{ dataUrl: string; filename: string }>;
   videoRecordingId?: string;
+  videoMimeType?: string;
   pageUrl: string;
   pageTitle: string;
   // Integration-specific options

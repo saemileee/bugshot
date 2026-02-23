@@ -17,6 +17,8 @@ interface SubmitPanelProps {
   onSuccess: () => void;
   onBack?: () => void;
   videoRecordingId?: string | null;
+  videoDataUrl?: string | null;
+  videoMimeType?: string | null;
   isPreview?: boolean;
 }
 
@@ -130,6 +132,8 @@ export function SubmitPanel({
   onSuccess,
   onBack,
   videoRecordingId,
+  videoDataUrl,
+  videoMimeType,
   isPreview,
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -262,6 +266,7 @@ export function SubmitPanel({
         manualNotes: description,
         screenshots: allScreenshots,
         videoRecordingId: videoRecordingId || undefined,
+        videoMimeType: videoMimeType || undefined,
         pageUrl: window.location.href,
         pageTitle: document.title,
         jiraOptions: Object.keys(jiraOptions).length > 0 ? jiraOptions : undefined,
@@ -437,6 +442,19 @@ export function SubmitPanel({
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Video Recording */}
+        {videoRecordingId && videoDataUrl && (
+          <div className="qa-preview-card">
+            <div className="qa-preview-label">Screen Recording</div>
+            <video
+              src={videoDataUrl}
+              controls
+              playsInline
+              style={{ width: '100%', borderRadius: 6, marginTop: 4 }}
+            />
           </div>
         )}
 
