@@ -531,15 +531,53 @@ function N8nSection() {
 // ── Main Settings Panel ──
 export function SettingsPanel() {
   const [recent, setRecent] = useState<Array<{ key: string; summary: string; createdAt: number }>>([]);
+  const [titlePrefix, setTitlePrefix] = useState('[BugShot]');
+  const [prefixSaved, setPrefixSaved] = useState(false);
 
   useEffect(() => {
     chrome.storage.local.get(STORAGE_KEYS.RECENT_SUBMISSIONS, (result) => {
       if (result[STORAGE_KEYS.RECENT_SUBMISSIONS]) setRecent(result[STORAGE_KEYS.RECENT_SUBMISSIONS].slice(0, 5));
     });
+    chrome.storage.sync.get(STORAGE_KEYS.TITLE_PREFIX, (result) => {
+      if (result[STORAGE_KEYS.TITLE_PREFIX] !== undefined) setTitlePrefix(result[STORAGE_KEYS.TITLE_PREFIX]);
+    });
   }, []);
+
+  const handlePrefixSave = useCallback(() => {
+    chrome.storage.sync.set({ [STORAGE_KEYS.TITLE_PREFIX]: titlePrefix }, () => {
+      setPrefixSaved(true);
+      setTimeout(() => setPrefixSaved(false), 2000);
+    });
+  }, [titlePrefix]);
 
   return (
     <div className="qa-settings">
+      <section className="qa-settings-section">
+        <h3 className="qa-settings-heading">General</h3>
+        <div className="qa-settings-field">
+          <label className="qa-settings-label">Title Prefix (말머리)</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="qa-settings-input"
+              type="text"
+              placeholder="[BugShot]"
+              value={titlePrefix}
+              onChange={(e) => setTitlePrefix(e.target.value)}
+              spellCheck={false}
+              style={{ flex: 1 }}
+            />
+            <button
+              className={`qa-btn ${prefixSaved ? 'qa-btn-success' : 'qa-btn-primary'}`}
+              onClick={handlePrefixSave}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {prefixSaved ? 'Saved!' : 'Save'}
+            </button>
+          </div>
+          <div className="qa-settings-field-hint">Example: {titlePrefix} Page Title - bug description</div>
+        </div>
+      </section>
+
       <section className="qa-settings-section">
         <h3 className="qa-settings-heading">Integrations</h3>
         <div className="qa-integrations-list">

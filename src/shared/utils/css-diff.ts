@@ -93,15 +93,35 @@ function hasVarReference(value: string): boolean {
 
 /**
  * Normalize CSS values for comparison.
+ * Handles various browser quirks in value formatting.
  */
 function normalizeValue(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g, 'rgb($1, $2, $3)')
-    .replace(
-      /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/g,
-      'rgba($1, $2, $3, $4)',
-    );
+  let normalized = value.trim().toLowerCase();
+
+  // Normalize whitespace
+  normalized = normalized.replace(/\s+/g, ' ');
+
+  // Normalize rgb/rgba with spaces
+  normalized = normalized.replace(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g, 'rgb($1, $2, $3)');
+  normalized = normalized.replace(
+    /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/g,
+    'rgba($1, $2, $3, $4)',
+  );
+
+  // Normalize zero values: 0px, 0em, 0%, etc. → 0
+  normalized = normalized.replace(/\b0(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|cm|mm|in|pt|pc)\b/g, '0');
+
+  // Normalize leading zero in decimals: .5 → 0.5
+  normalized = normalized.replace(/(?<![0-9])\.(\d)/g, '0.$1');
+
+  // Normalize trailing zeros in decimals: 1.50 → 1.5, 1.00 → 1
+  normalized = normalized.replace(/(\d+\.\d*?)0+\b/g, '$1').replace(/(\d+)\.0*\b/g, '$1');
+
+  // Remove quotes from simple values (font names, etc.)
+  normalized = normalized.replace(/["']/g, '');
+
+  // Normalize calc() whitespace
+  normalized = normalized.replace(/calc\(\s*/g, 'calc(').replace(/\s*\)/g, ')');
+
+  return normalized;
 }

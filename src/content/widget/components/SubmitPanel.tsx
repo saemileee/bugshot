@@ -3,7 +3,7 @@ import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
 import type { IntegrationResult, SubmissionPayload, IntegrationId } from '@/shared/types/integration';
 import type { ScreenshotData } from '../WidgetRoot';
-import { TICKET_PREFIX } from '@/shared/constants';
+import { STORAGE_KEYS } from '@/shared/constants';
 
 interface SubmitPanelProps {
   screenshots: ScreenshotData[];
@@ -101,14 +101,15 @@ function generatePlainText(
   return lines.join('\n');
 }
 
-function generatePreviewSummary(changes: CSSChange[]): string {
+function generatePreviewSummary(changes: CSSChange[], prefix: string): string {
   const title = document.title || window.location.pathname;
-  if (changes.length === 0) return `${TICKET_PREFIX} ${title} - Manual QA note`;
+  const pre = prefix ? `${prefix} ` : '';
+  if (changes.length === 0) return `${pre}${title} - Manual QA note`;
   if (changes.length === 1) {
     const prop = changes[0].properties[0]?.property || 'style';
-    return `${TICKET_PREFIX} ${title} - ${prop} change on ${changes[0].selector}`;
+    return `${pre}${title} - ${prop} change on ${changes[0].selector}`;
   }
-  return `${TICKET_PREFIX} ${title} - ${changes.length} CSS changes`;
+  return `${pre}${title} - ${changes.length} CSS changes`;
 }
 
 const INTEGRATION_LABELS: Record<IntegrationId, string> = {
@@ -131,7 +132,7 @@ export function SubmitPanel({
   const [results, setResults] = useState<IntegrationResult[] | null>(null);
   const [legacyResult, setLegacyResult] = useState<{ success: boolean; issueKey?: string; error?: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [editSummary, setEditSummary] = useState(() => generatePreviewSummary(changes));
+  const [editSummary, setEditSummary] = useState('');
   const [siteUrl, setSiteUrl] = useState('');
   const [enabledCount, setEnabledCount] = useState(0);
   const [enabledIntegrations, setEnabledIntegrations] = useState<IntegrationId[]>([]);
@@ -148,7 +149,12 @@ export function SubmitPanel({
         setEnabledIntegrations(enabled.map((i) => i.id));
       }
     });
-  }, []);
+    // Load title prefix and generate summary
+    chrome.storage.sync.get(STORAGE_KEYS.TITLE_PREFIX, (result) => {
+      const prefix = result[STORAGE_KEYS.TITLE_PREFIX] ?? '[BugShot]';
+      setEditSummary(generatePreviewSummary(changes, prefix));
+    });
+  }, [changes]);
 
   const useMultiIntegration = enabledCount > 0;
 

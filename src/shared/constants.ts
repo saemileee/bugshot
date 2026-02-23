@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   INTEGRATIONS: 'integrations',
   // Widget visibility toggle
   WIDGET_VISIBLE: 'widgetVisible',
+  // Title prefix (말머리)
+  TITLE_PREFIX: 'titlePrefix',
 } as const;
 
 // Default CSS properties to track (design-relevant)

@@ -17,6 +17,16 @@ describe('jira-formatter', () => {
       expect(result).toBe('[BugShot] Test Page - Manual QA note');
     });
 
+    it('should use custom prefix when provided', () => {
+      const result = generateSummary(baseChangeSet, '[QA]');
+      expect(result).toBe('[QA] Test Page - Manual QA note');
+    });
+
+    it('should handle empty prefix', () => {
+      const result = generateSummary(baseChangeSet, '');
+      expect(result).toBe('Test Page - Manual QA note');
+    });
+
     it('should generate summary for single change', () => {
       const changeSet: ChangeSet = {
         ...baseChangeSet,

@@ -220,17 +220,18 @@ export function buildWikiMarkupDescription(
   return lines.join('\n');
 }
 
-export function generateSummary(changeSet: ChangeSet): string {
+export function generateSummary(changeSet: ChangeSet, prefix: string = TICKET_PREFIX): string {
   const title =
     changeSet.pageTitle || new URL(changeSet.pageUrl).pathname;
+  const pre = prefix ? `${prefix} ` : '';
 
   if (changeSet.changes.length === 0) {
-    return `${TICKET_PREFIX} ${title} - Manual QA note`;
+    return `${pre}${title} - Manual QA note`;
   }
   if (changeSet.changes.length === 1) {
     const prop =
       changeSet.changes[0].properties[0]?.property || 'style';
-    return `${TICKET_PREFIX} ${title} - ${prop} change on ${changeSet.changes[0].selector}`;
+    return `${pre}${title} - ${prop} change on ${changeSet.changes[0].selector}`;
   }
-  return `${TICKET_PREFIX} ${title} - ${changeSet.changes.length} CSS changes`;
+  return `${pre}${title} - ${changeSet.changes.length} CSS changes`;
 }
