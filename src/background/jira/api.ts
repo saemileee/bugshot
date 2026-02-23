@@ -218,22 +218,29 @@ export async function fetchStatuses(projectKey: string): Promise<JiraStatus[]> {
 }
 
 export async function fetchEpics(projectKey: string): Promise<JiraEpic[]> {
-  const jql = encodeURIComponent(
-    `project = "${projectKey}" AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`,
-  );
-  const response = await jiraFetch(
-    `/rest/api/3/search?jql=${jql}&maxResults=50&fields=summary,status`,
-  );
-  const data = await response.json();
-  return (data.issues || []).map((i: Record<string, unknown>) => {
-    const fields = i.fields as Record<string, unknown>;
-    const status = fields.status as Record<string, unknown> | undefined;
-    return {
-      key: i.key,
-      summary: (fields.summary as string) || '',
-      status: (status?.name as string) || '',
-    };
-  });
+  try {
+    const jql = encodeURIComponent(
+      `project = "${projectKey}" AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`,
+    );
+    console.log('[Jira] Fetching epics for project:', projectKey);
+    const response = await jiraFetch(
+      `/rest/api/3/search?jql=${jql}&maxResults=50&fields=summary,status`,
+    );
+    const data = await response.json();
+    console.log('[Jira] Epics response:', data.issues?.length || 0, 'epics found');
+    return (data.issues || []).map((i: Record<string, unknown>) => {
+      const fields = i.fields as Record<string, unknown>;
+      const status = fields.status as Record<string, unknown> | undefined;
+      return {
+        key: i.key,
+        summary: (fields.summary as string) || '',
+        status: (status?.name as string) || '',
+      };
+    });
+  } catch (err) {
+    console.error('[Jira] Failed to fetch epics:', err);
+    return [];
+  }
 }
 
 export interface JiraSearchResult {

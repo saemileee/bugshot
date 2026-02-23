@@ -167,12 +167,20 @@ export function SubmitPanel({
           chrome.runtime.sendMessage({ type: 'FETCH_JIRA_PRIORITIES' }, resolve);
         }),
         new Promise<{ success: boolean; data?: JiraEpic[] }>((resolve) => {
-          chrome.runtime.sendMessage({ type: 'FETCH_JIRA_EPICS', projectKey }, resolve);
+          chrome.runtime.sendMessage({ type: 'FETCH_JIRA_EPICS', projectKey }, (res) => {
+            console.log('[SubmitPanel] Epics response:', res);
+            resolve(res);
+          });
         }),
       ]);
       if (assigneesRes.success && assigneesRes.data) setJiraAssignees(assigneesRes.data);
       if (prioritiesRes.success && prioritiesRes.data) setJiraPriorities(prioritiesRes.data);
-      if (epicsRes.success && epicsRes.data) setJiraEpics(epicsRes.data);
+      if (epicsRes.success && epicsRes.data) {
+        console.log('[SubmitPanel] Setting epics:', epicsRes.data.length);
+        setJiraEpics(epicsRes.data);
+      } else {
+        console.log('[SubmitPanel] No epics or failed:', epicsRes);
+      }
     } finally {
       setLoadingJiraOptions(false);
     }
