@@ -17,6 +17,16 @@ export interface IntegrationResult {
   error?: string;
 }
 
+export interface JiraSubmitOptions {
+  assigneeId?: string;
+  priorityId?: string;
+}
+
+export interface GithubSubmitOptions {
+  labels?: string[];
+  assignees?: string[];
+}
+
 export interface SubmissionPayload {
   changes: CSSChange[];
   summary: string;
@@ -25,4 +35,7 @@ export interface SubmissionPayload {
   videoRecordingId?: string;
   pageUrl: string;
   pageTitle: string;
+  // Integration-specific options
+  jiraOptions?: JiraSubmitOptions;
+  githubOptions?: GithubSubmitOptions;
 }

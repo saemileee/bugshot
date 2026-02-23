@@ -9,6 +9,8 @@ import {
   fetchStatuses,
   fetchEpics,
   searchIssues,
+  fetchAssignableUsers,
+  fetchPriorities,
 } from '../jira/api';
 import { startRecording, stopRecording, getRecordingBlob } from '../recording/manager';
 import { STORAGE_KEYS } from '@/shared/constants';
@@ -244,6 +246,20 @@ function handleOneShotMessage(
     case 'SEARCH_JIRA_ISSUES': {
       searchIssues(message.projectKey, message.query)
         .then((issues) => sendResponse({ success: true, data: issues }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'FETCH_JIRA_ASSIGNEES': {
+      fetchAssignableUsers(message.projectKey)
+        .then((users) => sendResponse({ success: true, data: users }))
+        .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
+      break;
+    }
+
+    case 'FETCH_JIRA_PRIORITIES': {
+      fetchPriorities()
+        .then((priorities) => sendResponse({ success: true, data: priorities }))
         .catch((err) => sendResponse({ success: false, error: (err as Error).message }));
       break;
     }

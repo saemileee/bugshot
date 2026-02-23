@@ -45,6 +45,8 @@ export type ExtensionMessage =
   | { type: 'FETCH_JIRA_STATUSES'; projectKey: string }
   | { type: 'FETCH_JIRA_EPICS'; projectKey: string }
   | { type: 'SEARCH_JIRA_ISSUES'; projectKey: string; query: string }
+  | { type: 'FETCH_JIRA_ASSIGNEES'; projectKey: string }
+  | { type: 'FETCH_JIRA_PRIORITIES' }
 
   // CDP CSS inspection
   | { type: 'GET_ELEMENT_STYLES'; selector: string }

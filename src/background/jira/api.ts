@@ -49,6 +49,16 @@ export async function createIssue(
       description: payload.description,
     };
 
+    // Handle assignee
+    if (payload.assigneeId) {
+      fields.assignee = { accountId: payload.assigneeId };
+    }
+
+    // Handle priority
+    if (payload.priorityId) {
+      fields.priority = { id: payload.priorityId };
+    }
+
     // Handle parent linking
     if (payload.parentKey) {
       // Check if parent is an Epic
@@ -272,6 +282,56 @@ export async function getIssueType(issueKey: string): Promise<string | null> {
   } catch (err) {
     console.warn('[Jira] Failed to get issue type:', err);
     return null;
+  }
+}
+
+export interface JiraUser {
+  accountId: string;
+  displayName: string;
+  avatarUrl?: string;
+}
+
+export interface JiraPriority {
+  id: string;
+  name: string;
+  iconUrl?: string;
+}
+
+/**
+ * Fetch assignable users for a project.
+ */
+export async function fetchAssignableUsers(projectKey: string): Promise<JiraUser[]> {
+  try {
+    const response = await jiraFetch(
+      `/rest/api/3/user/assignable/search?project=${projectKey}&maxResults=50`,
+    );
+    const data = await response.json();
+    return (data || []).map((u: Record<string, unknown>) => ({
+      accountId: u.accountId as string,
+      displayName: u.displayName as string,
+      avatarUrl: (u.avatarUrls as Record<string, string>)?.['24x24'],
+    }));
+  } catch (err) {
+    console.warn('[Jira] Failed to fetch assignable users:', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch available priorities.
+ */
+export async function fetchPriorities(): Promise<JiraPriority[]> {
+  try {
+    const response = await jiraFetch('/rest/api/3/priority');
+    const data = await response.json();
+    return (data || []).map((p: Record<string, unknown>) => ({
+      id: p.id as string,
+      name: p.name as string,
+      iconUrl: p.iconUrl as string | undefined,
+    }));
+  } catch (err) {
+    console.warn('[Jira] Failed to fetch priorities:', err);
+    return [];
   }
 }
 

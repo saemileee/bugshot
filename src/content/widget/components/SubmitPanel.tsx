@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
-import type { IntegrationResult, SubmissionPayload, IntegrationId } from '@/shared/types/integration';
+import type { IntegrationResult, SubmissionPayload, IntegrationId, JiraSubmitOptions } from '@/shared/types/integration';
 import type { ScreenshotData } from '../WidgetRoot';
 import { STORAGE_KEYS } from '@/shared/constants';
+
+interface JiraUser { accountId: string; displayName: string; avatarUrl?: string }
+interface JiraPriority { id: string; name: string; iconUrl?: string }
 
 interface SubmitPanelProps {
   screenshots: ScreenshotData[];
@@ -137,6 +140,32 @@ export function SubmitPanel({
   const [enabledCount, setEnabledCount] = useState(0);
   const [enabledIntegrations, setEnabledIntegrations] = useState<IntegrationId[]>([]);
 
+  // Jira options state
+  const [jiraOptionsOpen, setJiraOptionsOpen] = useState(false);
+  const [jiraAssignees, setJiraAssignees] = useState<JiraUser[]>([]);
+  const [jiraPriorities, setJiraPriorities] = useState<JiraPriority[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
+  const [loadingJiraOptions, setLoadingJiraOptions] = useState(false);
+
+  const loadJiraOptions = useCallback(async (projectKey: string) => {
+    setLoadingJiraOptions(true);
+    try {
+      const [assigneesRes, prioritiesRes] = await Promise.all([
+        new Promise<{ success: boolean; data?: JiraUser[] }>((resolve) => {
+          chrome.runtime.sendMessage({ type: 'FETCH_JIRA_ASSIGNEES', projectKey }, resolve);
+        }),
+        new Promise<{ success: boolean; data?: JiraPriority[] }>((resolve) => {
+          chrome.runtime.sendMessage({ type: 'FETCH_JIRA_PRIORITIES' }, resolve);
+        }),
+      ]);
+      if (assigneesRes.success && assigneesRes.data) setJiraAssignees(assigneesRes.data);
+      if (prioritiesRes.success && prioritiesRes.data) setJiraPriorities(prioritiesRes.data);
+    } finally {
+      setLoadingJiraOptions(false);
+    }
+  }, []);
+
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' }, (r) => {
       if (r?.siteUrl) setSiteUrl(r.siteUrl);
@@ -154,7 +183,15 @@ export function SubmitPanel({
       const prefix = result[STORAGE_KEYS.TITLE_PREFIX] ?? '[BugShot]';
       setEditSummary(generatePreviewSummary(changes, prefix));
     });
-  }, [changes]);
+
+    // Load Jira project key for options
+    chrome.storage.sync.get(STORAGE_KEYS.EPIC_CONFIG, (result) => {
+      const config = result[STORAGE_KEYS.EPIC_CONFIG];
+      if (config?.projectKey) {
+        loadJiraOptions(config.projectKey);
+      }
+    });
+  }, [changes, loadJiraOptions]);
 
   const useMultiIntegration = enabledCount > 0;
 
@@ -193,6 +230,11 @@ export function SubmitPanel({
       if (c.screenshotAfter) allScreenshots.push({ dataUrl: c.screenshotAfter, filename: `${safeSel}-to-be.png` });
     }
 
+    // Build Jira options
+    const jiraOptions: JiraSubmitOptions = {};
+    if (selectedAssignee) jiraOptions.assigneeId = selectedAssignee;
+    if (selectedPriority) jiraOptions.priorityId = selectedPriority;
+
     if (useMultiIntegration) {
       // Multi-integration path
       const payload: SubmissionPayload = {
@@ -203,6 +245,7 @@ export function SubmitPanel({
         videoRecordingId: videoRecordingId || undefined,
         pageUrl: window.location.href,
         pageTitle: document.title,
+        jiraOptions: Object.keys(jiraOptions).length > 0 ? jiraOptions : undefined,
       };
 
       try {
@@ -394,6 +437,86 @@ export function SubmitPanel({
             <div>Captured: {new Date().toLocaleString()}</div>
           </div>
         </div>
+
+        {/* Integration Options */}
+        {enabledIntegrations.includes('jira') && (
+          <div className="qa-preview-card">
+            <button
+              className="qa-integration-options-header"
+              onClick={() => setJiraOptionsOpen(!jiraOptionsOpen)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'inherit',
+              }}
+            >
+              <div className="qa-preview-label" style={{ marginBottom: 0 }}>
+                Jira Options
+                {(selectedAssignee || selectedPriority) && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: '#3b82f6' }}>
+                    ({[selectedAssignee && 'Assignee', selectedPriority && 'Priority'].filter(Boolean).join(', ')})
+                  </span>
+                )}
+              </div>
+              <svg
+                className={`qa-section-chevron ${jiraOptionsOpen ? 'open' : ''}`}
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {jiraOptionsOpen && (
+              <div style={{ marginTop: 12 }}>
+                {loadingJiraOptions ? (
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading options...</div>
+                ) : (
+                  <>
+                    <div className="qa-settings-field" style={{ marginBottom: 8 }}>
+                      <label className="qa-settings-label" style={{ fontSize: 11 }}>Assignee</label>
+                      <select
+                        className="qa-settings-input"
+                        value={selectedAssignee}
+                        onChange={(e) => setSelectedAssignee(e.target.value)}
+                        style={{ fontSize: 12 }}
+                      >
+                        <option value="">Unassigned</option>
+                        {jiraAssignees.map((u) => (
+                          <option key={u.accountId} value={u.accountId}>{u.displayName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="qa-settings-field">
+                      <label className="qa-settings-label" style={{ fontSize: 11 }}>Priority</label>
+                      <select
+                        className="qa-settings-input"
+                        value={selectedPriority}
+                        onChange={(e) => setSelectedPriority(e.target.value)}
+                        style={{ fontSize: 12 }}
+                      >
+                        <option value="">Default</option>
+                        {jiraPriorities.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Multi-integration results */}
         {results && (

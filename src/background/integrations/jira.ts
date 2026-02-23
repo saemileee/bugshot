@@ -78,6 +78,8 @@ export async function submitToJira(
       summary,
       description,
       parentKey: config.settings.parentKey || undefined,
+      assigneeId: payload.jiraOptions?.assigneeId,
+      priorityId: payload.jiraOptions?.priorityId,
     });
     console.log('[Jira] Issue created:', issue.key);
 

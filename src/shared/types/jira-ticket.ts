@@ -12,6 +12,8 @@ export interface JiraIssuePayload {
   summary: string;
   description: object; // ADF format
   parentKey?: string;
+  assigneeId?: string;
+  priorityId?: string;
 }
 
 export interface JiraAttachment {
