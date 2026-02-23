@@ -83,12 +83,30 @@ function collectRuleBlocks(el: Element): StyleRuleBlock[] {
       }
 
       const props: RuleProperty[] = [];
+      const addedProps = new Set<string>();
+
+      // Iterate declared properties
       for (let p = 0; p < rule.style.length; p++) {
         const prop = rule.style.item(p);
         const val = rule.style.getPropertyValue(prop).trim();
         const priority = rule.style.getPropertyPriority(prop);
-        if (val) props.push({ property: prop, value: val, priority, overridden: false });
+        if (val) {
+          props.push({ property: prop, value: val, priority, overridden: false });
+          addedProps.add(prop);
+        }
       }
+
+      // Check shorthand properties that may not appear in iteration
+      const SHORTHAND_PROPS = ['gap', 'margin', 'padding', 'border', 'background', 'font', 'flex', 'grid'];
+      for (const shorthand of SHORTHAND_PROPS) {
+        if (addedProps.has(shorthand)) continue;
+        const val = rule.style.getPropertyValue(shorthand).trim();
+        if (val) {
+          const priority = rule.style.getPropertyPriority(shorthand);
+          props.push({ property: shorthand, value: val, priority, overridden: false });
+        }
+      }
+
       if (props.length === 0) continue;
 
       let src = source;
@@ -167,7 +185,7 @@ const COMMON_PROPS = [
   'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
   'color', 'background-color', 'background',
   'border', 'border-radius', 'border-color',
-  'gap', 'flex-direction', 'align-items', 'justify-content',
+  'row-gap', 'column-gap', 'flex-direction', 'align-items', 'justify-content',
   'opacity', 'overflow', 'z-index', 'box-shadow', 'text-align',
 ];
 

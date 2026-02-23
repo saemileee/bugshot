@@ -93,6 +93,24 @@ export function WidgetRoot() {
     if (picker.isPicking) setActiveTab(null);
   }, [picker.isPicking]);
 
+  // ── Clear picked element when widget becomes invisible ──
+  useEffect(() => {
+    if (!visible) {
+      picker.clearPicked();
+      tracking.reset();
+      setActiveTab(null);
+    }
+  }, [visible, picker, tracking]);
+
+  // ── Handle tab change (clear picked element when panel closes) ──
+  const handleTabChange = useCallback((tab: ToolbarTab) => {
+    if (tab === null && picker.pickedElement) {
+      picker.clearPicked();
+      tracking.reset();
+    }
+    setActiveTab(tab);
+  }, [picker, tracking]);
+
   // ── Element picked → open changes panel in editing mode ──
   useEffect(() => {
     if (picker.pickedElement) {
@@ -455,7 +473,7 @@ export function WidgetRoot() {
   return (
     <FloatingWidget
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={handleTabChange}
       isRecording={isRecording}
       isPicking={picker.isPicking}
       isCapturing={isCapturing}
