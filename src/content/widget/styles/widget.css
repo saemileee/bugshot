@@ -221,10 +221,13 @@
   @apply flex items-center gap-2;
 }
 
-.qa-footer-primary {
-  flex: 1;
+.qa-footer-actions .qa-btn {
   min-height: 44px;
   font-size: 14px;
+}
+
+.qa-footer-primary {
+  flex: 1;
 }
 
 /* ── Sections ── */
@@ -310,14 +313,16 @@
 }
 
 .qa-btn-next {
-  @apply bg-slate-700 text-white hover:bg-slate-800;
+  @apply bg-white text-slate-700 hover:bg-slate-50;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
 }
 
 .qa-btn-next svg {
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .qa-btn-danger {
