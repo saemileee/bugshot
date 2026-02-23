@@ -40,23 +40,28 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
       const port = portRef.current;
       if (!port) { reject(new Error('Not connected')); return; }
 
-      // Hide all BugShot UI elements and save original display values
-      const elementsToHide: Array<{ el: HTMLElement; originalDisplay: string }> = [
+      // Hide all BugShot UI elements and save original styles
+      const elementsToHide: Array<{ el: HTMLElement; original: { display: string; visibility: string } }> = [
         document.getElementById('bugshot-root'),
         document.getElementById('bugshot-picked-highlight'),
         document.getElementById('bugshot-picker-highlight'),
         document.getElementById('bugshot-picker-label'),
       ]
         .filter((el): el is HTMLElement => el !== null)
-        .map((el) => ({ el, originalDisplay: el.style.display }));
+        .map((el) => ({ el, original: { display: el.style.display, visibility: el.style.visibility } }));
 
-      elementsToHide.forEach(({ el }) => { el.style.display = 'none'; });
+      // Use both display:none and visibility:hidden for extra safety
+      elementsToHide.forEach(({ el }) => {
+        el.style.display = 'none';
+        el.style.visibility = 'hidden';
+      });
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const show = () => {
-            elementsToHide.forEach(({ el, originalDisplay }) => {
-              el.style.display = originalDisplay;
+            elementsToHide.forEach(({ el, original }) => {
+              el.style.display = original.display;
+              el.style.visibility = original.visibility;
             });
           };
 
