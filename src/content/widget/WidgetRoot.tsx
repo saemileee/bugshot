@@ -49,7 +49,6 @@ export function WidgetRoot() {
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<ToolbarTab>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
 
   // ── Data state ──
@@ -141,10 +140,6 @@ export function WidgetRoot() {
     }
   }, [picker.pickedElement, tracking.captureBefore, captureElement]);
 
-  // ── Auto-open notes when description exists ──
-  useEffect(() => {
-    if (description.trim()) setNotesOpen(true);
-  }, [description]);
 
   // ── Toolbar actions ──
   const handleStartPicking = useCallback(() => {
@@ -485,25 +480,11 @@ export function WidgetRoot() {
               <hr className="qa-divider" />
 
               <section className="qa-section">
-                <button
-                  className="qa-section-toggle"
-                  onClick={() => setNotesOpen((p) => !p)}
-                >
-                  <h3 className="qa-section-title" style={{ marginBottom: 0 }}>Notes</h3>
-                  <span className={`qa-section-chevron ${notesOpen ? 'open' : ''}`}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </span>
-                </button>
-                {notesOpen && (
-                  <div style={{ marginTop: 8 }}>
-                    <ManualDescription
-                      description={description}
-                      onDescriptionChange={setDescription}
-                    />
-                  </div>
-                )}
+                <h3 className="qa-section-title">Notes</h3>
+                <ManualDescription
+                  description={description}
+                  onDescriptionChange={setDescription}
+                />
               </section>
             </>
           )}
