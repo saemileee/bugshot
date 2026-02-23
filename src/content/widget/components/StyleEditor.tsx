@@ -420,18 +420,17 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
       </div>
 
       {/* textContent */}
-      {textContent !== '' && (
-        <div className="qa-sp-field">
-          <span className="qa-sp-field-label">text</span>
-          <input
-            type="text"
-            className="qa-sp-class-input"
-            value={textContent}
-            onChange={(e) => handleTextContentChange(e.target.value)}
-            spellCheck={false}
-          />
-        </div>
-      )}
+      <div className="qa-sp-field">
+        <span className="qa-sp-field-label">text</span>
+        <input
+          type="text"
+          className="qa-sp-class-input"
+          value={textContent}
+          onChange={(e) => handleTextContentChange(e.target.value)}
+          placeholder="(no text)"
+          spellCheck={false}
+        />
+      </div>
 
       {/* Filter bar */}
       <div className="qa-sp-bar">
