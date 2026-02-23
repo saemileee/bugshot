@@ -28,7 +28,13 @@ import {
 // Port registry keyed by tabId
 const contentPorts = new Map<number, chrome.runtime.Port>();
 
+// Guard to prevent duplicate listener registration
+let hubInitialized = false;
+
 export function initializeMessagingHub() {
+  if (hubInitialized) return;
+  hubInitialized = true;
+
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name === 'content-widget') {
       handleContentPort(port);

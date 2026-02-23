@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
 import { WidgetRoot } from './widget/WidgetRoot';
 import widgetCSS from './widget/styles/widget.css?inline';
-import './mutation-observer';
+// Removed mutation-observer import - it was sending messages that nothing handled
 
 function injectWidget() {
   // Prevent double injection

@@ -61,6 +61,13 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  // Cleanup search timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
+
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true); setFetchError(null);
     try {

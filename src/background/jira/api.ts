@@ -206,10 +206,27 @@ export async function searchIssues(
   projectKey: string,
   query: string,
 ): Promise<JiraSearchResult[]> {
-  const escaped = query.replace(/"/g, '\\"');
-  const jql = encodeURIComponent(
-    `project = "${projectKey}" AND (summary ~ "${escaped}" OR key = "${escaped}") ORDER BY updated DESC`,
-  );
+  // Escape JQL reserved characters for text search
+  const escapedForText = query
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[[\](){}+\-&|!^~*?:]/g, '\\$&');
+
+  // Check if query looks like a Jira key (e.g., "PROJ-123" or "123")
+  const keyPattern = /^([A-Z]+-)?(\d+)$/i;
+  const keyMatch = query.trim().match(keyPattern);
+
+  let jqlCondition: string;
+  if (keyMatch) {
+    // If it's a key pattern, search by key contains
+    const keySearch = keyMatch[1] ? query.trim().toUpperCase() : `${projectKey}-${keyMatch[2]}`;
+    jqlCondition = `project = "${projectKey}" AND key = "${keySearch}"`;
+  } else {
+    // Text search in summary with wildcard
+    jqlCondition = `project = "${projectKey}" AND summary ~ "${escapedForText}*"`;
+  }
+
+  const jql = encodeURIComponent(`${jqlCondition} ORDER BY updated DESC`);
   const response = await jiraFetch(
     `/rest/api/3/search?jql=${jql}&maxResults=20&fields=summary,status,issuetype`,
   );

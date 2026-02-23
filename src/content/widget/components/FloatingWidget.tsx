@@ -112,10 +112,13 @@ export function FloatingWidget({
     onTabChange(activeTab === tab ? null : tab);
   }, [activeTab, onTabChange]);
 
+  // Hide panel while recording (but keep toolbar visible for stop button)
+  const showPanel = isPanelOpen && !isRecording;
+
   return (
     <>
       {/* ── Y-axis Panel (draggable) ── */}
-      {isPanelOpen && (
+      {showPanel && (
         <div
           className="qa-panel qa-slide-in"
           style={{

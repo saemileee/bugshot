@@ -73,7 +73,7 @@ const CSS_PROPERTIES = [
   'overscroll-behavior', 'overscroll-behavior-x', 'overscroll-behavior-y',
 
   // Columns
-  'columns', 'column-count', 'column-width', 'column-gap', 'column-rule',
+  'columns', 'column-count', 'column-width', 'column-rule',
 
   // Other
   'content', 'quotes', 'counter-reset', 'counter-increment',
