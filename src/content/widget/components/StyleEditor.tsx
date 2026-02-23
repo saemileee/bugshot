@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PropertyValueInput } from './PropertyValueInput';
+import { PropertyNameInput } from './PropertyNameInput';
+import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
 
 interface StyleEditorProps {
   element: Element;
@@ -198,6 +200,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
   const [newPropName, setNewPropName] = useState('');
   const [newPropValue, setNewPropValue] = useState('');
   const htmlEl = useRef<HTMLElement | null>(null);
+  const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
 
   useEffect(() => {
     htmlEl.current = element as HTMLElement;
@@ -257,9 +260,9 @@ export function StyleEditor({ element }: StyleEditorProps) {
     );
   }, []);
 
-  const handleAddProperty = useCallback(() => {
+  const handleAddProperty = useCallback((submittedValue?: string) => {
     const prop = newPropName.trim();
-    const val = newPropValue.trim();
+    const val = (submittedValue ?? newPropValue).trim();
     if (!prop || !htmlEl.current) return;
 
     htmlEl.current.style.setProperty(prop, val);
@@ -349,30 +352,24 @@ export function StyleEditor({ element }: StyleEditorProps) {
               {/* Add property */}
               {addingToBlock === block.id ? (
                 <div className="qa-sp-add">
-                  <input
-                    className="qa-sp-add-n"
-                    placeholder="property"
+                  <PropertyNameInput
                     value={newPropName}
-                    onChange={(e) => setNewPropName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).nextElementSibling?.nextElementSibling
-                        && ((e.target as HTMLInputElement).nextElementSibling!.nextElementSibling as HTMLInputElement)?.focus();
-                      if (e.key === 'Escape') setAddingToBlock(null);
+                    onChange={setNewPropName}
+                    onSelect={(name) => {
+                      setNewPropName(name);
+                      // Focus the value input after selecting property
+                      setTimeout(() => valueInputRef.current?.focus(), 0);
                     }}
-                    spellCheck={false}
-                    autoFocus
+                    onEscape={() => setAddingToBlock(null)}
                   />
                   <span className="qa-sp-c">:</span>
-                  <input
-                    className="qa-sp-add-v"
-                    placeholder="value"
+                  <PropertyValueAutocomplete
+                    ref={valueInputRef}
+                    property={newPropName}
                     value={newPropValue}
-                    onChange={(e) => setNewPropValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddProperty();
-                      if (e.key === 'Escape') setAddingToBlock(null);
-                    }}
-                    spellCheck={false}
+                    onChange={setNewPropValue}
+                    onSubmit={handleAddProperty}
+                    onEscape={() => setAddingToBlock(null)}
                   />
                   <span className="qa-sp-sc">;</span>
                 </div>
