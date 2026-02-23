@@ -223,6 +223,8 @@
 
 .qa-footer-primary {
   flex: 1;
+  min-height: 44px;
+  font-size: 14px;
 }
 
 /* ── Sections ── */
@@ -333,7 +335,10 @@
 }
 
 .qa-btn-lg {
-  @apply px-5 py-2.5 text-sm;
+  @apply px-5 text-sm;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  min-height: 48px;
 }
 
 .qa-btn-block {
