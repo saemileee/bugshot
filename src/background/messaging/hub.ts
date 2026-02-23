@@ -385,6 +385,25 @@ function handleOneShotMessage(
       });
       break;
     }
+
+    case 'GET_ELEMENT_STYLES': {
+      const tabId = _sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ type: 'ELEMENT_STYLES_RESULT', success: false, error: 'No tab ID' });
+        break;
+      }
+      getElementStylesViaCDP(tabId, message.selector).then((styles) => {
+        sendResponse({ type: 'ELEMENT_STYLES_RESULT', success: true, styles });
+      }).catch((error) => {
+        console.error('CDP CSS fetch failed:', error);
+        sendResponse({
+          type: 'ELEMENT_STYLES_RESULT',
+          success: false,
+          error: (error as Error).message,
+        });
+      });
+      break;
+    }
   }
 }
 
