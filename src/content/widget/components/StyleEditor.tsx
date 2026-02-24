@@ -9,6 +9,119 @@ interface StyleEditorProps {
   selector: string;
 }
 
+/* ── Shorthand property grouping ── */
+
+interface ShorthandMapping {
+  shorthand: string;
+  longhands: string[];
+  // How to combine values: 'box' (top/right/bottom/left), 'corner' (4 corners), 'pair' (2 values)
+  type: 'box' | 'corner' | 'pair';
+}
+
+const SHORTHAND_MAPPINGS: ShorthandMapping[] = [
+  { shorthand: 'padding', longhands: ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'], type: 'box' },
+  { shorthand: 'margin', longhands: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'], type: 'box' },
+  { shorthand: 'border-style', longhands: ['border-top-style', 'border-right-style', 'border-bottom-style', 'border-left-style'], type: 'box' },
+  { shorthand: 'border-width', longhands: ['border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width'], type: 'box' },
+  { shorthand: 'border-color', longhands: ['border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'], type: 'box' },
+  { shorthand: 'border-radius', longhands: ['border-top-left-radius', 'border-top-right-radius', 'border-bottom-right-radius', 'border-bottom-left-radius'], type: 'corner' },
+  { shorthand: 'gap', longhands: ['row-gap', 'column-gap'], type: 'pair' },
+  { shorthand: 'inset', longhands: ['top', 'right', 'bottom', 'left'], type: 'box' },
+];
+
+function isDefaultValue(prop: string, value: string): boolean {
+  const v = value.toLowerCase().trim();
+
+  // Border style 'none' means no border
+  if (prop.includes('border') && prop.includes('style') && v === 'none') {
+    return true;
+  }
+
+  // Padding/margin 0 is default
+  if ((prop.startsWith('padding') || prop.startsWith('margin')) && (v === '0px' || v === '0')) {
+    return true;
+  }
+
+  return false;
+}
+
+function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
+  const propMap = new Map<string, RuleProperty>();
+  for (const p of props) {
+    propMap.set(p.property, p);
+  }
+
+  const result: RuleProperty[] = [];
+  const consumed = new Set<string>();
+
+  for (const mapping of SHORTHAND_MAPPINGS) {
+    const longhands = mapping.longhands.map((name) => propMap.get(name)).filter(Boolean) as RuleProperty[];
+
+    // Only collapse if ALL longhands are present
+    if (longhands.length !== mapping.longhands.length) continue;
+
+    // Check if all have the same priority
+    const priorities = new Set(longhands.map((p) => p.priority));
+    if (priorities.size > 1) continue;
+
+    // Check if all are overridden or none are
+    const overridden = longhands.every((p) => p.overridden);
+    const notOverridden = longhands.every((p) => !p.overridden);
+    if (!overridden && !notOverridden) continue;
+
+    const values = longhands.map((p) => p.value);
+
+    // Skip if all values are defaults (e.g., all padding-* are 0px)
+    if (values.every((v, i) => isDefaultValue(mapping.longhands[i], v))) {
+      mapping.longhands.forEach((name) => consumed.add(name));
+      continue;
+    }
+
+    let shorthandValue: string;
+
+    if (mapping.type === 'box' || mapping.type === 'corner') {
+      // Box model: top, right, bottom, left
+      const [top, right, bottom, left] = values;
+
+      if (top === right && right === bottom && bottom === left) {
+        shorthandValue = top;
+      } else if (top === bottom && right === left) {
+        shorthandValue = `${top} ${right}`;
+      } else if (right === left) {
+        shorthandValue = `${top} ${right} ${bottom}`;
+      } else {
+        shorthandValue = `${top} ${right} ${bottom} ${left}`;
+      }
+    } else if (mapping.type === 'pair') {
+      const [first, second] = values;
+      shorthandValue = first === second ? first : `${first} ${second}`;
+    } else {
+      continue;
+    }
+
+    result.push({
+      property: mapping.shorthand,
+      value: shorthandValue,
+      priority: longhands[0].priority,
+      overridden: overridden,
+    });
+
+    mapping.longhands.forEach((name) => consumed.add(name));
+  }
+
+  // Add remaining properties that weren't collapsed
+  for (const p of props) {
+    if (!consumed.has(p.property)) {
+      // Skip default values for certain properties
+      if (!isDefaultValue(p.property, p.value)) {
+        result.push(p);
+      }
+    }
+  }
+
+  return result;
+}
+
 /* ── Fetch styles via CDP (Chrome DevTools Protocol) ── */
 
 async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
@@ -47,7 +160,7 @@ function convertCDPToBlocks(cdpResult: CDPStyleResult): StyleRuleBlock[] {
     id: `block-${blockId++}`,
     selector: 'element.style',
     source: '',
-    properties: inlineProps,
+    properties: collapseToShorthand(inlineProps),
     isInline: true,
   });
 
@@ -60,16 +173,22 @@ function convertCDPToBlocks(cdpResult: CDPStyleResult): StyleRuleBlock[] {
       overridden: false,
     }));
 
+    // Collapse longhand properties to shorthand
+    const collapsedProps = collapseToShorthand(props);
+
+    // Skip blocks with no meaningful properties after filtering
+    if (collapsedProps.length === 0) continue;
+
     blocks.push({
       id: `block-${blockId++}`,
       selector: rule.selector,
       source: rule.source,
-      properties: props,
+      properties: collapsedProps,
       isInline: false,
     });
   }
 
-  // Mark overridden properties
+  // Mark overridden properties (need to handle shorthand vs longhand conflicts)
   const winner = new Map<string, string>();
   for (const block of blocks) {
     for (const p of block.properties) {
@@ -230,13 +349,22 @@ function collectRuleBlocks(el: Element): StyleRuleBlock[] {
   const inlineBlock = blocks[0];
   const ruleBlocks = blocks.slice(1).reverse();
 
-  // 4. Mark overridden properties
+  // 4. Collapse longhand properties to shorthand for each block
+  inlineBlock.properties = collapseToShorthand(inlineBlock.properties);
+  for (const block of ruleBlocks) {
+    block.properties = collapseToShorthand(block.properties);
+  }
+
+  // 5. Filter out empty blocks
+  const filteredRuleBlocks = ruleBlocks.filter((b) => b.properties.length > 0);
+
+  // 6. Mark overridden properties
   const winner = new Map<string, string>();
   // Inline wins first (unless !important elsewhere)
   for (const p of inlineBlock.properties) {
     winner.set(p.property, inlineBlock.id);
   }
-  for (const block of ruleBlocks) {
+  for (const block of filteredRuleBlocks) {
     for (const p of block.properties) {
       if (!winner.has(p.property)) {
         winner.set(p.property, block.id);
@@ -245,7 +373,7 @@ function collectRuleBlocks(el: Element): StyleRuleBlock[] {
       }
     }
   }
-  const allBlocks = [inlineBlock, ...ruleBlocks];
+  const allBlocks = [inlineBlock, ...filteredRuleBlocks];
   for (const block of allBlocks) {
     for (const p of block.properties) {
       p.overridden = winner.get(p.property) !== block.id;
@@ -257,14 +385,14 @@ function collectRuleBlocks(el: Element): StyleRuleBlock[] {
 
 /* ── Computed styles fallback (when no rule blocks found) ── */
 
+// Use shorthand properties where possible
 const COMMON_PROPS = [
   'display', 'position', 'width', 'height', 'max-width', 'min-width',
-  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-  'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'padding', 'margin',
   'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
   'color', 'background-color', 'background',
-  'border', 'border-radius', 'border-color',
-  'row-gap', 'column-gap', 'flex-direction', 'align-items', 'justify-content',
+  'border', 'border-radius', 'border-color', 'border-style', 'border-width',
+  'gap', 'flex-direction', 'align-items', 'justify-content',
   'opacity', 'overflow', 'z-index', 'box-shadow', 'text-align',
 ];
 
