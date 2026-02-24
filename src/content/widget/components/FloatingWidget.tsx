@@ -341,12 +341,14 @@ export function FloatingWidget({
             "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
             "hover:bg-slate-100 hover:text-slate-600",
             isCapturing && "bg-slate-100 text-slate-800",
-            isPreviewMode && "opacity-40 cursor-not-allowed"
+            (isPreviewMode || isPicking || isEditing) && "opacity-40 cursor-not-allowed"
           )}
-          onClick={isPreviewMode ? flashPanel : onScreenshot}
+          onClick={(isPreviewMode || isPicking || isEditing) ? flashPanel : onScreenshot}
           disabled={isCapturing}
           title={
-            isPreviewMode
+            isPicking || isEditing
+              ? "Finish editing to take screenshots"
+              : isPreviewMode
               ? "Exit preview to take screenshots"
               : "Take Screenshot"
           }
@@ -361,12 +363,14 @@ export function FloatingWidget({
             "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
             "hover:bg-slate-100 hover:text-slate-600",
             isRecording && "bg-red-50 text-red-500 animate-pulse-opacity",
-            (isPreviewMode || hasRecording) && !isRecording && "opacity-40 cursor-not-allowed"
+            (isPreviewMode || hasRecording || isPicking || isEditing) && !isRecording && "opacity-40 cursor-not-allowed"
           )}
-          onClick={(isPreviewMode || hasRecording) && !isRecording ? flashPanel : onRecordToggle}
+          onClick={(isPreviewMode || hasRecording || isPicking || isEditing) && !isRecording ? flashPanel : onRecordToggle}
           title={
             isRecording
               ? "Stop Recording"
+              : isPicking || isEditing
+              ? "Finish editing to record"
               : hasRecording
               ? "Video already recorded"
               : isPreviewMode
