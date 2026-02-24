@@ -35,22 +35,41 @@ function hasInteractivePseudoClass(selector: string): boolean {
 }
 
 
+/**
+ * Escape special characters in CSS identifier (class name or ID)
+ * Characters that need escaping in CSS identifiers:
+ * - [ ] for Tailwind arbitrary values: w-[300px]
+ * - ! for Tailwind important: !w-full
+ * - / for Tailwind peer/group: peer/edit
+ * - : for Tailwind variants (in class names): hover:text-red
+ * - . for decimal values: w-3.5
+ * - @ # and other special chars
+ */
+function escapeCSSIdentifier(str: string): string {
+  // Escape characters that are not valid in CSS identifiers without escaping
+  // Valid: a-z A-Z 0-9 - _ and characters >= U+00A0
+  // Everything else needs backslash escaping
+  return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
+}
+
 function buildSelector(el: Element): string {
   const parts: string[] = [];
   let current: Element | null = el;
   while (current && current !== document.body && parts.length < 5) {
     let s = current.tagName.toLowerCase();
     if (current.id) {
-      parts.unshift('#' + current.id);
+      // Escape special characters in ID
+      parts.unshift('#' + escapeCSSIdentifier(current.id));
       break;
     }
     if (current.className && typeof current.className === 'string') {
-      const cls = current.className
+      const classes = current.className
         .trim()
         .split(/\s+/)
         .slice(0, 2)
+        .map(escapeCSSIdentifier)  // Escape each class name
         .join('.');
-      if (cls) s += '.' + cls;
+      if (classes) s += '.' + classes;
     }
     parts.unshift(s);
     current = current.parentElement;

@@ -592,33 +592,29 @@ async function handleDryRunSubmission(
  * This provides accurate CSS information including shorthand properties
  */
 /**
- * Escape special characters in CSS selector for CDP querySelector
- * Tailwind classes like `max-w-[36rem]` and `!w-full` need escaping
- * But preserve selector structure (combinators: >, +, ~, spaces)
+ * CSS selector is now properly escaped at the source (buildSelector in useContentCSSTracking).
+ * This function is kept for any edge cases but should mostly be a pass-through.
  */
 function escapeCSSSelector(selector: string): string {
-  // Split by combinators and spaces, escape each part, then rejoin
-  // Combinators: > (child), + (adjacent sibling), ~ (general sibling), space (descendant)
-  return selector
-    .split(/(\s*[>+~]\s*|\s+)/)
-    .map(part => {
-      // If it's a combinator or whitespace, keep as-is
-      if (/^(\s*[>+~]\s*|\s+)$/.test(part)) {
-        return part;
-      }
-      // Escape special characters in class/id names: [ ] !
-      // These are common in Tailwind CSS
-      return part.replace(/([[\]!])/g, '\\$1');
-    })
-    .join('');
+  // The selector should already be properly escaped from buildSelector
+  // Just return as-is
+  return selector;
 }
 
 async function getElementStylesViaCDP(tabId: number, selector: string): Promise<CDPStyleResult> {
   const target = { tabId };
   const escapedSelector = escapeCSSSelector(selector);
 
+  console.log('[CDP] Original selector:', selector);
+  console.log('[CDP] Escaped selector:', escapedSelector);
+
   // Attach debugger
-  await chrome.debugger.attach(target, '1.3');
+  try {
+    await chrome.debugger.attach(target, '1.3');
+  } catch (attachError) {
+    console.error('[CDP] Failed to attach debugger:', attachError);
+    throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
+  }
 
   try {
     // Enable DOM first, then CSS (DOM must be enabled before CSS operations)
@@ -631,13 +627,20 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
     };
 
     // Find element by selector
-    const queryResult = await chrome.debugger.sendCommand(target, 'DOM.querySelector', {
-      nodeId: docResult.root.nodeId,
-      selector: escapedSelector,
-    }) as { nodeId: number };
+    let queryResult: { nodeId: number };
+    try {
+      queryResult = await chrome.debugger.sendCommand(target, 'DOM.querySelector', {
+        nodeId: docResult.root.nodeId,
+        selector: escapedSelector,
+      }) as { nodeId: number };
+    } catch (queryError) {
+      console.error('[CDP] querySelector failed for:', escapedSelector, queryError);
+      throw new Error(`Invalid selector "${selector}": ${(queryError as Error).message}`);
+    }
 
     if (!queryResult.nodeId) {
-      throw new Error(`Element not found: ${escapedSelector}`);
+      console.warn('[CDP] Element not found with selector:', escapedSelector);
+      throw new Error(`Element not found: ${selector}`);
     }
 
     // Get matched styles
