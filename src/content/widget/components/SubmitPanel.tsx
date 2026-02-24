@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { CSSChange } from '@/shared/types/css-change';
-import type { ExtensionMessage, JiraSubmissionPayload } from '@/shared/types/messages';
+import type { JiraSubmissionPayload } from '@/shared/types/messages';
 import type { IntegrationResult, SubmissionPayload, IntegrationId, JiraSubmitOptions } from '@/shared/types/integration';
 import type { ScreenshotData } from '../WidgetRoot';
+import type { SendMessageFn } from '../hooks/useSWMessaging';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { SearchableSelect, type SelectOption } from './SearchableSelect';
 
@@ -13,7 +14,7 @@ interface SubmitPanelProps {
   screenshots: ScreenshotData[];
   description: string;
   changes: CSSChange[];
-  sendMessage: (msg: ExtensionMessage) => Promise<ExtensionMessage>;
+  sendMessage: SendMessageFn;
   onSuccess: () => void;
   onBack?: () => void;
   videoRecordingId?: string | null;

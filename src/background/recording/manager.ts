@@ -4,6 +4,20 @@
 let isRecording = false;
 let recordingTabId: number | null = null;
 
+// Track offscreen document ready state
+let offscreenReady = false;
+const readyWaiters: Array<() => void> = [];
+
+// Listen for ready signal from offscreen document
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'offscreen-ready' && message.target === 'service-worker') {
+    offscreenReady = true;
+    // Resolve all waiting promises
+    readyWaiters.forEach((resolve) => resolve());
+    readyWaiters.length = 0;
+  }
+});
+
 export async function startRecording(tabId: number): Promise<void> {
   if (isRecording) {
     throw new Error('Already recording');
@@ -70,6 +84,9 @@ async function ensureOffscreenDocument(): Promise<boolean> {
 
   if (existingContexts.length > 0) return false;
 
+  // Reset ready state before creating new document
+  offscreenReady = false;
+
   await chrome.offscreen.createDocument({
     url: 'src/offscreen/offscreen.html',
     reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA],
@@ -80,17 +97,38 @@ async function ensureOffscreenDocument(): Promise<boolean> {
 }
 
 /**
+ * Wait for offscreen document to be ready.
+ * Uses ready signal instead of arbitrary timeout.
+ */
+async function waitForOffscreenReady(): Promise<void> {
+  if (offscreenReady) return;
+
+  return new Promise((resolve) => {
+    // Timeout after 5 seconds as a fallback
+    const timeout = setTimeout(() => {
+      console.warn('[Recording] Offscreen ready timeout, proceeding anyway');
+      resolve();
+    }, 5000);
+
+    const waiter = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+
+    readyWaiters.push(waiter);
+  });
+}
+
+/**
  * Retrieve a recording as a Blob from the offscreen document's IndexedDB.
  * Uses base64 string for serialization since Blob can't pass through sendMessage.
  */
 export async function getRecordingBlob(recordingId: string): Promise<Blob | null> {
   const wasCreated = await ensureOffscreenDocument();
 
-  // If we just created the offscreen document, wait for its script to load
-  // and register the message listener. Without this, the message arrives
-  // before the listener is ready and gets silently dropped.
+  // Wait for offscreen document to signal it's ready
   if (wasCreated) {
-    await new Promise((r) => setTimeout(r, 600));
+    await waitForOffscreenReady();
   }
 
   return new Promise((resolve) => {

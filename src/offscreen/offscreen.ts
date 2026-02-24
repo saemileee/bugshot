@@ -7,6 +7,14 @@ let recorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let stream: MediaStream | null = null;
 
+// Signal to service worker that offscreen document is ready
+chrome.runtime.sendMessage({
+  type: 'offscreen-ready',
+  target: 'service-worker',
+}).catch(() => {
+  // Ignore errors if service worker is not ready yet
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== 'offscreen') return;
 

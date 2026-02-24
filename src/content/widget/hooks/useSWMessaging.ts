@@ -1,6 +1,34 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { ExtensionMessage } from '@/shared/types/messages';
 
+/**
+ * Type-safe message request/response mapping.
+ * Maps request message types to their expected response types.
+ */
+type MessageResponseMap = {
+  CAPTURE_SCREENSHOT: Extract<ExtensionMessage, { type: 'SCREENSHOT_CAPTURED' }>;
+  START_RECORDING: Extract<ExtensionMessage, { type: 'RECORDING_STARTED' }>;
+  STOP_RECORDING: Extract<ExtensionMessage, { type: 'RECORDING_STOPPED' }>;
+  CHECK_AUTH_STATUS: Extract<ExtensionMessage, { type: 'AUTH_STATUS' }>;
+  FETCH_JIRA_PROJECTS: { projects: unknown[] };
+  FETCH_JIRA_ISSUE_TYPES: { issueTypes: unknown[] };
+  FETCH_JIRA_EPICS: { epics: unknown[] };
+  FETCH_JIRA_ASSIGNEES: { assignees: unknown[] };
+  FETCH_JIRA_PRIORITIES: { priorities: unknown[] };
+  SEARCH_JIRA_ISSUES: { issues: unknown[] };
+  SUBMIT_TO_JIRA: Extract<ExtensionMessage, { type: 'JIRA_SUBMIT_RESULT' }>;
+  SUBMIT_TO_INTEGRATIONS: Extract<ExtensionMessage, { type: 'INTEGRATION_RESULTS' }>;
+  GET_ELEMENT_STYLES: Extract<ExtensionMessage, { type: 'ELEMENT_STYLES_RESULT' }>;
+};
+
+type MessageType = ExtensionMessage['type'];
+type ResponseFor<T extends MessageType> = T extends keyof MessageResponseMap
+  ? MessageResponseMap[T]
+  : ExtensionMessage;
+
+/** Type for the sendMessage function - use this in component props */
+export type SendMessageFn = <T extends ExtensionMessage>(message: T) => Promise<ResponseFor<T['type']>>;
+
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY = 1000;
 
@@ -71,7 +99,13 @@ export function useSWMessaging(onPortMessage?: (msg: ExtensionMessage) => void) 
     };
   }, []);
 
-  const sendMessage = useCallback((message: ExtensionMessage): Promise<ExtensionMessage> => {
+  /**
+   * Type-safe message sender that infers response type from request type.
+   * Example: sendMessage({ type: 'CHECK_AUTH_STATUS' }) returns Promise<{ type: 'AUTH_STATUS', ... }>
+   */
+  const sendMessage = useCallback(<T extends ExtensionMessage>(
+    message: T
+  ): Promise<ResponseFor<T['type']>> => {
     return new Promise((resolve, reject) => {
       // Check if extension context is still valid
       if (!chrome.runtime?.id) {
@@ -83,7 +117,7 @@ export function useSWMessaging(onPortMessage?: (msg: ExtensionMessage) => void) 
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
-          resolve(response as ExtensionMessage);
+          resolve(response as ResponseFor<T['type']>);
         }
       });
     });

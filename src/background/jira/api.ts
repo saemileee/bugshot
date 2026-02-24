@@ -457,24 +457,42 @@ export async function fetchPriorities(): Promise<JiraPriority[]> {
   }
 }
 
+const MAX_SEARCH_QUERY_LENGTH = 200;
+
 export async function searchIssues(
   projectKey: string,
   query: string,
 ): Promise<JiraSearchResult[]> {
+  // Input validation
+  if (!projectKey || projectKey.trim().length === 0) {
+    console.warn('[Jira] searchIssues called without projectKey');
+    return [];
+  }
+
+  if (!query || query.trim().length === 0) {
+    return [];
+  }
+
+  // Truncate extremely long queries to prevent performance issues
+  let sanitizedQuery = query.trim();
+  if (sanitizedQuery.length > MAX_SEARCH_QUERY_LENGTH) {
+    sanitizedQuery = sanitizedQuery.substring(0, MAX_SEARCH_QUERY_LENGTH);
+  }
+
   // Escape JQL reserved characters for text search
-  const escapedForText = query
+  const escapedForText = sanitizedQuery
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
     .replace(/[[\](){}+\-&|!^~*?:]/g, '\\$&');
 
   // Check if query looks like a Jira key (e.g., "PROJ-123" or "123")
   const keyPattern = /^([A-Z]+-)?(\d+)$/i;
-  const keyMatch = query.trim().match(keyPattern);
+  const keyMatch = sanitizedQuery.match(keyPattern);
 
   let jqlCondition: string;
   if (keyMatch) {
     // If it's a key pattern, search by key contains
-    const keySearch = keyMatch[1] ? query.trim().toUpperCase() : `${projectKey}-${keyMatch[2]}`;
+    const keySearch = keyMatch[1] ? sanitizedQuery.toUpperCase() : `${projectKey}-${keyMatch[2]}`;
     jqlCondition = `project = "${projectKey}" AND key = "${keySearch}"`;
   } else {
     // Text search in summary with wildcard
