@@ -29,6 +29,7 @@ interface FloatingWidgetProps {
   isPreviewMode?: boolean;
   isEditing?: boolean;
   hasContent: boolean;
+  hasRecording?: boolean;
   onPickElement: () => void;
   onScreenshot: () => void;
   onRecordToggle: () => void;
@@ -49,6 +50,7 @@ export function FloatingWidget({
   isPreviewMode,
   isEditing,
   hasContent,
+  hasRecording,
   onPickElement,
   onScreenshot,
   onRecordToggle,
@@ -359,12 +361,14 @@ export function FloatingWidget({
             "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
             "hover:bg-slate-100 hover:text-slate-600",
             isRecording && "bg-red-50 text-red-500 animate-pulse-opacity",
-            isPreviewMode && !isRecording && "opacity-40 cursor-not-allowed"
+            (isPreviewMode || hasRecording) && !isRecording && "opacity-40 cursor-not-allowed"
           )}
-          onClick={isPreviewMode && !isRecording ? flashPanel : onRecordToggle}
+          onClick={(isPreviewMode || hasRecording) && !isRecording ? flashPanel : onRecordToggle}
           title={
             isRecording
               ? "Stop Recording"
+              : hasRecording
+              ? "Video already recorded"
               : isPreviewMode
               ? "Exit preview to record"
               : "Record Screen"

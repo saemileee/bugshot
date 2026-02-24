@@ -695,6 +695,7 @@ export function WidgetRoot() {
       isPreviewMode={showPreview}
       isEditing={isEditing}
       hasContent={hasContent}
+      hasRecording={!!recordingId}
       onPickElement={handleStartPicking}
       onScreenshot={handleToolbarScreenshot}
       onRecordToggle={handleToolbarRecord}
