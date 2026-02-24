@@ -230,200 +230,6 @@ interface StyleRuleBlock {
   isInline: boolean;
 }
 
-/* ── Collect all matching CSS rule blocks ── */
-
-function collectRuleBlocks(el: Element): StyleRuleBlock[] {
-  const htmlEl = el as HTMLElement;
-  const blocks: StyleRuleBlock[] = [];
-  let blockId = 0;
-
-  // 1. element.style (inline) — always first
-  const inlineProps: RuleProperty[] = [];
-  for (let i = 0; i < htmlEl.style.length; i++) {
-    const prop = htmlEl.style.item(i);
-    const val = htmlEl.style.getPropertyValue(prop).trim();
-    const priority = htmlEl.style.getPropertyPriority(prop);
-    if (val) inlineProps.push({ property: prop, value: val, priority, overridden: false });
-  }
-  blocks.push({
-    id: `block-${blockId++}`,
-    selector: 'element.style',
-    source: '',
-    properties: inlineProps,
-    isInline: true,
-  });
-
-  // 2. Collect matching rules from all stylesheets
-  function processRuleList(rules: CSSRuleList, source: string, context: string) {
-    for (let i = 0; i < rules.length; i++) {
-      const rule = rules[i];
-
-      // Grouping rules — recurse into children
-      if (rule instanceof CSSMediaRule) {
-        try {
-          const ctx = `@media ${rule.conditionText || rule.media.mediaText}`;
-          processRuleList(rule.cssRules, source, ctx);
-        } catch { /* can't access sub-rules */ }
-        continue;
-      }
-      if (rule instanceof CSSSupportsRule) {
-        try {
-          processRuleList(rule.cssRules, source, `@supports ${rule.conditionText}`);
-        } catch {}
-        continue;
-      }
-      // @layer blocks
-      try {
-        if ((rule as any).cssRules && !(rule instanceof CSSStyleRule)) {
-          processRuleList((rule as any).cssRules, source, context);
-          continue;
-        }
-      } catch {}
-
-      // Style rules — check if matches our element
-      if (!(rule instanceof CSSStyleRule)) continue;
-
-      try {
-        if (!el.matches(rule.selectorText)) continue;
-      } catch {
-        continue; // invalid or complex selector
-      }
-
-      const props: RuleProperty[] = [];
-      const addedProps = new Set<string>();
-
-      // Iterate declared properties
-      for (let p = 0; p < rule.style.length; p++) {
-        const prop = rule.style.item(p);
-        const val = rule.style.getPropertyValue(prop).trim();
-        const priority = rule.style.getPropertyPriority(prop);
-        if (val) {
-          props.push({ property: prop, value: val, priority, overridden: false });
-          addedProps.add(prop);
-        }
-      }
-
-      // Check shorthand properties that may not appear in iteration
-      const SHORTHAND_PROPS = ['gap', 'margin', 'padding', 'border', 'background', 'font', 'flex', 'grid'];
-      for (const shorthand of SHORTHAND_PROPS) {
-        if (addedProps.has(shorthand)) continue;
-        const val = rule.style.getPropertyValue(shorthand).trim();
-        if (val) {
-          const priority = rule.style.getPropertyPriority(shorthand);
-          props.push({ property: shorthand, value: val, priority, overridden: false });
-        }
-      }
-
-      if (props.length === 0) continue;
-
-      let src = source;
-      if (context) src = `${context} — ${src}`;
-
-      blocks.push({
-        id: `block-${blockId++}`,
-        selector: rule.selectorText,
-        source: src,
-        properties: props,
-        isInline: false,
-      });
-    }
-  }
-
-  // Iterate ALL stylesheets individually
-  for (let s = 0; s < document.styleSheets.length; s++) {
-    const sheet = document.styleSheets[s];
-    let source: string;
-    try {
-      source = sheet.href ? (sheet.href.split('/').pop() || sheet.href) : `<style>#${s}`;
-    } catch {
-      source = `<style>#${s}`;
-    }
-
-    let rules: CSSRuleList;
-    try {
-      rules = sheet.cssRules;
-    } catch {
-      // CORS-blocked stylesheet — skip
-      continue;
-    }
-
-    try {
-      processRuleList(rules, source, '');
-    } catch {
-      // Error processing rules in this sheet — skip
-    }
-  }
-
-  // 3. Reverse non-inline blocks (last matched = highest specificity → show first)
-  const inlineBlock = blocks[0];
-  const ruleBlocks = blocks.slice(1).reverse();
-
-  // 4. Collapse longhand properties to shorthand for each block
-  inlineBlock.properties = collapseToShorthand(inlineBlock.properties);
-  for (const block of ruleBlocks) {
-    block.properties = collapseToShorthand(block.properties);
-  }
-
-  // 5. Filter out empty blocks
-  const filteredRuleBlocks = ruleBlocks.filter((b) => b.properties.length > 0);
-
-  // 6. Mark overridden properties
-  const winner = new Map<string, string>();
-  // Inline wins first (unless !important elsewhere)
-  for (const p of inlineBlock.properties) {
-    winner.set(p.property, inlineBlock.id);
-  }
-  for (const block of filteredRuleBlocks) {
-    for (const p of block.properties) {
-      if (!winner.has(p.property)) {
-        winner.set(p.property, block.id);
-      } else if (p.priority === 'important' && winner.get(p.property) !== inlineBlock.id) {
-        winner.set(p.property, block.id);
-      }
-    }
-  }
-  const allBlocks = [inlineBlock, ...filteredRuleBlocks];
-  for (const block of allBlocks) {
-    for (const p of block.properties) {
-      p.overridden = winner.get(p.property) !== block.id;
-    }
-  }
-
-  return allBlocks;
-}
-
-/* ── Computed styles fallback (when no rule blocks found) ── */
-
-// Use shorthand properties where possible
-const COMMON_PROPS = [
-  'display', 'position', 'width', 'height', 'max-width', 'min-width',
-  'padding', 'margin',
-  'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
-  'color', 'background-color', 'background',
-  'border', 'border-radius', 'border-color', 'border-style', 'border-width',
-  'gap', 'flex-direction', 'align-items', 'justify-content',
-  'opacity', 'overflow', 'z-index', 'box-shadow', 'text-align',
-];
-
-function getComputedBlock(el: Element): StyleRuleBlock {
-  const computed = window.getComputedStyle(el);
-  const props: RuleProperty[] = [];
-  for (const prop of COMMON_PROPS) {
-    const val = computed.getPropertyValue(prop).trim();
-    if (val && val !== 'none' && val !== 'normal' && val !== 'auto'
-      && val !== '0px' && val !== 'rgba(0, 0, 0, 0)' && val !== 'rgb(0, 0, 0)') {
-      props.push({ property: prop, value: val, priority: '', overridden: false });
-    }
-  }
-  return {
-    id: 'computed-block',
-    selector: 'Computed',
-    source: '(stylesheets not accessible)',
-    properties: props,
-    isInline: false,
-  };
-}
-
 /* ── Component ── */
 
 export function StyleEditor({ element, selector }: StyleEditorProps) {
@@ -433,7 +239,8 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
   const [addingToBlock, setAddingToBlock] = useState<string | null>(null);
   const [newPropName, setNewPropName] = useState('');
   const [newPropValue, setNewPropValue] = useState('');
-  const [cdpSource, setCdpSource] = useState(false);
+  const [cdpError, setCdpError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const htmlEl = useRef<HTMLElement | null>(null);
   const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
 
@@ -452,32 +259,32 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
     }
     setTextContent(directText.trim());
 
-    // Try CDP first, fallback to direct DOM access
+    // Fetch styles via CDP (no fallback - show error if CDP fails)
     let cancelled = false;
+    setIsLoading(true);
+    setCdpError(null);
+
     (async () => {
-      if (selector) {
-        const cdpResult = await fetchStylesViaCDP(selector);
-        if (!cancelled && cdpResult) {
-          const cdpBlocks = convertCDPToBlocks(cdpResult);
-          if (cdpBlocks.length > 1 || cdpBlocks[0].properties.length > 0) {
-            setBlocks(cdpBlocks);
-            setCdpSource(true);
-            return;
-          }
+      if (!selector) {
+        if (!cancelled) {
+          setCdpError('No selector available for this element');
+          setIsLoading(false);
         }
+        return;
       }
 
+      const cdpResult = await fetchStylesViaCDP(selector);
       if (cancelled) return;
 
-      // Fallback: CDP failed, using direct DOM access (less accurate)
-      console.warn('[StyleEditor] CDP failed or returned empty, using DOM fallback (may be less accurate)');
-      // Fallback to direct DOM access
-      const collected = collectRuleBlocks(element);
-      if (collected.length <= 1) {
-        collected.push(getComputedBlock(element));
+      if (!cdpResult) {
+        setCdpError('CDP connection failed. Try closing DevTools or refreshing the page.');
+        setIsLoading(false);
+        return;
       }
-      setBlocks(collected);
-      setCdpSource(false);
+
+      const cdpBlocks = convertCDPToBlocks(cdpResult);
+      setBlocks(cdpBlocks);
+      setIsLoading(false);
     })();
 
     return () => { cancelled = true; };
@@ -572,17 +379,30 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
         </div>
       )}
 
+      {/* Loading state */}
+      {isLoading && (
+        <div className="qa-sp-loading">Loading styles...</div>
+      )}
+
+      {/* Error state */}
+      {cdpError && (
+        <div className="qa-sp-error">
+          <span className="qa-sp-error-icon">⚠</span>
+          <span>{cdpError}</span>
+        </div>
+      )}
+
       {/* Filter bar */}
-      <div className="qa-sp-bar">
-        <span>{ruleCount} matched rule{ruleCount !== 1 ? 's' : ''}</span>
-        <span>
-          {cdpSource ? 'CDP' : `${document.styleSheets.length} stylesheet${document.styleSheets.length !== 1 ? 's' : ''}`}
-        </span>
-      </div>
+      {!isLoading && !cdpError && (
+        <div className="qa-sp-bar">
+          <span>{ruleCount} matched rule{ruleCount !== 1 ? 's' : ''}</span>
+          <span>CDP</span>
+        </div>
+      )}
 
       {/* Rule blocks */}
       <div className="qa-sp-scroll">
-        {blocks.map((block) => (
+        {!isLoading && !cdpError && blocks.map((block) => (
           <div key={block.id} className="qa-sp-rule">
             <div className="qa-sp-rule-header">
               <span className={`qa-sp-sel ${block.isInline ? 'qa-sp-sel-inline' : ''}`}>

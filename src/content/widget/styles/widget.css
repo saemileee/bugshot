@@ -1077,6 +1077,33 @@ video.qa-media-preview {
   background: #fff;
 }
 
+/* ── Loading & Error States ── */
+.qa-sp-loading {
+  padding: 24px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.qa-sp-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  margin: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.qa-sp-error-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
 /* ── Property Name Autocomplete ── */
 .qa-sp-autocomplete-wrap {
   position: relative;
