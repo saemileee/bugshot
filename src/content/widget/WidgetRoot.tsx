@@ -88,6 +88,53 @@ export function WidgetRoot() {
 
   const beforeScreenshotRef = useRef<string | null>(null);
 
+  // ── Helper to delete recording from IndexedDB ──
+  const deleteRecordingFromDB = useCallback(async (recId: string) => {
+    try {
+      await sendMessage({
+        type: "DELETE_RECORDING",
+        recordingId: recId,
+      });
+    } catch {
+      // Ignore errors - recording will be cleaned up by 24h auto-cleanup
+    }
+  }, [sendMessage]);
+
+  // ── Clear video recording (also deletes from IndexedDB) ──
+  const handleClearRecording = useCallback(() => {
+    if (recordingId) {
+      deleteRecordingFromDB(recordingId);
+    }
+    setRecordingId(null);
+    setRecordingDataUrl(null);
+    setRecordingSize(null);
+    setRecordingMimeType(null);
+  }, [recordingId, deleteRecordingFromDB]);
+
+  // ── Clear all draft data ──
+  const handleClearAll = useCallback(() => {
+    // Delete recording from IndexedDB if present
+    if (recordingId) {
+      deleteRecordingFromDB(recordingId);
+    }
+    // Clear all React state
+    setScreenshots([]);
+    setAnnotatingIndex(null);
+    setDescription("");
+    setChanges([]);
+    setRecordingId(null);
+    setRecordingDataUrl(null);
+    setRecordingSize(null);
+    setRecordingMimeType(null);
+    setIsConverting(false);
+    setConversionProgress(null);
+    setShowPreview(false);
+    setEditNote("");
+    beforeScreenshotRef.current = null;
+    tracking.reset();
+    picker.clearPicked();
+  }, [recordingId, deleteRecordingFromDB, tracking, picker]);
+
   const isEditing = tracking.status.state === "before_captured";
   const hasContent =
     screenshots.length > 0 ||
@@ -314,14 +361,23 @@ export function WidgetRoot() {
 
     if (hasContent) {
       return (
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() => setShowPreview(true)}
-        >
-          Review Issue
-          <ArrowRight className="w-3 h-3" />
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            className="text-gray-500 hover:text-red-500"
+            onClick={handleClearAll}
+          >
+            Clear All
+          </Button>
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => setShowPreview(true)}
+          >
+            Review Issue
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        </div>
       );
     }
 
@@ -334,6 +390,7 @@ export function WidgetRoot() {
     hasContent,
     handleResetCapture,
     handleCaptureAfter,
+    handleClearAll,
   ]);
 
   // ── Panel content based on active tab ──
@@ -481,11 +538,7 @@ export function WidgetRoot() {
                           </span>
                           <button
                             className="flex items-center justify-center w-6 h-6 p-0 border-none bg-transparent cursor-pointer text-gray-400 hover:text-red-500"
-                            onClick={() => {
-                              setRecordingId(null);
-                              setRecordingDataUrl(null);
-                              setRecordingSize(null);
-                            }}
+                            onClick={handleClearRecording}
                             title="Remove"
                           >
                             <svg

@@ -407,6 +407,21 @@ function handleOneShotMessage(
       });
       break;
     }
+
+    case 'DELETE_RECORDING': {
+      // Forward to offscreen document to delete from IndexedDB
+      chrome.runtime.sendMessage({
+        type: 'delete-recording',
+        target: 'offscreen',
+        recordingId: message.recordingId,
+      }).then(() => {
+        sendResponse({ success: true });
+      }).catch((error) => {
+        console.warn('Failed to delete recording:', error);
+        sendResponse({ success: false, error: (error as Error).message });
+      });
+      break;
+    }
   }
 }
 
