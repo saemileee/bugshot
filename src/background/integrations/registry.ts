@@ -127,7 +127,7 @@ export async function submitToAll(
     configs.map((cfg) => submitTo(cfg, payload)),
   );
 
-  return results.map((r, i) => {
+  const mappedResults = results.map((r, i) => {
     if (r.status === 'fulfilled') return r.value;
     return {
       integrationId: configs[i].id,
@@ -135,6 +135,23 @@ export async function submitToAll(
       error: (r.reason as Error)?.message || 'Unknown error',
     };
   });
+
+  // Clean up video recording from IndexedDB if all submissions succeeded
+  const allSucceeded = mappedResults.every((r) => r.success);
+  if (allSucceeded && payload.videoRecordingId) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'delete-recording',
+        target: 'offscreen',
+        recordingId: payload.videoRecordingId,
+      });
+      console.log('[Registry] Cleaned up recording:', payload.videoRecordingId);
+    } catch (err) {
+      console.warn('[Registry] Failed to clean up recording:', err);
+    }
+  }
+
+  return mappedResults;
 }
 
 async function submitTo(

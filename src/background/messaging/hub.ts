@@ -540,6 +540,20 @@ async function handleJiraSubmission(
   // Save to recent submissions
   await saveToRecentSubmissions(issue.key, summary);
 
+  // Clean up video recording from IndexedDB after successful submission
+  if (payload.videoRecordingId) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'delete-recording',
+        target: 'offscreen',
+        recordingId: payload.videoRecordingId,
+      });
+      jiraLogger.info('Cleaned up recording:', payload.videoRecordingId);
+    } catch (err) {
+      jiraLogger.warn('Failed to clean up recording:', err);
+    }
+  }
+
   return issue;
 }
 
@@ -583,6 +597,19 @@ async function handleDryRunSubmission(
   await chrome.storage.local.set({
     [STORAGE_KEYS.RECENT_SUBMISSIONS]: recent.slice(0, 20),
   });
+
+  // Clean up video recording from IndexedDB even in dry-run
+  if (payload.videoRecordingId) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'delete-recording',
+        target: 'offscreen',
+        recordingId: payload.videoRecordingId,
+      });
+    } catch {
+      // Ignore cleanup errors in dry-run
+    }
+  }
 
   return { key: fakeKey };
 }
