@@ -103,6 +103,10 @@ function handleContentPort(port: chrome.runtime.Port) {
           port.postMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl });
         } catch (error) {
           console.error('Screenshot capture failed:', error);
+          port.postMessage({
+            type: 'SCREENSHOT_ERROR',
+            error: (error as Error).message || 'Screenshot capture failed',
+          });
         }
         break;
       }
@@ -405,6 +409,84 @@ function handleOneShotMessage(
   }
 }
 
+// ── Helper functions for Jira submission ──
+
+function createChangeSetFromPayload(payload: JiraSubmissionPayload): ChangeSet {
+  return {
+    id: crypto.randomUUID(),
+    pageUrl: payload.pageUrl,
+    pageTitle: payload.pageTitle,
+    changes: payload.changes,
+    manualNotes: payload.manualNotes || '',
+    createdAt: Date.now(),
+  };
+}
+
+function collectAttachmentFilenames(payload: JiraSubmissionPayload): {
+  all: string[];
+  video?: string;
+} {
+  const all = payload.screenshots.map((s) => s.filename);
+  let video: string | undefined;
+  if (payload.videoRecordingId) {
+    video = `recording-${Date.now()}.webm`;
+    all.push(video);
+  }
+  return { all, video };
+}
+
+async function uploadAttachments(
+  issueKey: string,
+  payload: JiraSubmissionPayload,
+  videoFilename?: string,
+): Promise<number> {
+  let uploadedCount = 0;
+
+  // Upload screenshots
+  for (const screenshot of payload.screenshots) {
+    try {
+      const blob = dataUrlToBlob(screenshot.dataUrl);
+      await addAttachment(issueKey, blob, screenshot.filename);
+      uploadedCount++;
+      console.log('[Jira] Attached:', screenshot.filename);
+    } catch (err) {
+      console.warn('[Jira] Failed to attach', screenshot.filename, err);
+    }
+  }
+
+  // Upload video if present
+  if (payload.videoRecordingId && videoFilename) {
+    console.log('[Jira] Fetching video blob for:', payload.videoRecordingId);
+    try {
+      const videoBlob = await getRecordingBlob(payload.videoRecordingId);
+      if (videoBlob) {
+        console.log('[Jira] Video blob size:', videoBlob.size);
+        await addAttachment(issueKey, videoBlob, videoFilename);
+        uploadedCount++;
+        console.log('[Jira] Video attached:', videoFilename);
+      } else {
+        console.log('[Jira] getRecordingBlob returned null');
+      }
+    } catch (err) {
+      console.warn('[Jira] Video attach failed:', err);
+    }
+  }
+
+  return uploadedCount;
+}
+
+async function saveToRecentSubmissions(issueKey: string, summary: string): Promise<void> {
+  const recentResult = await chrome.storage.local.get(STORAGE_KEYS.RECENT_SUBMISSIONS);
+  const recent: Array<{ key: string; summary: string; createdAt: number }> =
+    recentResult[STORAGE_KEYS.RECENT_SUBMISSIONS] || [];
+  recent.unshift({ key: issueKey, summary, createdAt: Date.now() });
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.RECENT_SUBMISSIONS]: recent.slice(0, 20),
+  });
+}
+
+// ── Main submission handler ──
+
 async function handleJiraSubmission(
   payload: JiraSubmissionPayload,
 ): Promise<{ key: string }> {
@@ -416,35 +498,20 @@ async function handleJiraSubmission(
     return handleDryRunSubmission(payload);
   }
 
-  const changeSet: ChangeSet = {
-    id: crypto.randomUUID(),
-    pageUrl: payload.pageUrl,
-    pageTitle: payload.pageTitle,
-    changes: payload.changes,
-    manualNotes: payload.manualNotes || '',
-    createdAt: Date.now(),
-  };
+  const changeSet = createChangeSetFromPayload(payload);
+  const filenames = collectAttachmentFilenames(payload);
 
-  // ── Diagnostic logging ──
   console.log('[Jira] Submission start:', {
     changes: payload.changes.length,
     screenshots: payload.screenshots.length,
-    screenshotFiles: payload.screenshots.map((s) => s.filename),
+    screenshotFiles: filenames.all,
     videoRecordingId: payload.videoRecordingId ?? '(none)',
     manualNotes: payload.manualNotes ? `${payload.manualNotes.length} chars` : '(none)',
   });
 
-  // Collect all filenames that will be attached (known before upload)
-  const allFilenames = payload.screenshots.map((s) => s.filename);
-  let videoFilename: string | undefined;
-  if (payload.videoRecordingId) {
-    videoFilename = `recording-${Date.now()}.webm`;
-    allFilenames.push(videoFilename);
-  }
-
-  // Phase 1: Create issue with comprehensive ADF description (fallback if Phase 3 fails)
+  // Phase 1: Create issue
   const summary = payload.summary || generateSummary(changeSet);
-  const description = buildFullDescription(changeSet, allFilenames);
+  const description = buildFullDescription(changeSet, filenames.all);
 
   const issue = await createIssue({
     projectKey: epicConfig.projectKey,
@@ -455,42 +522,13 @@ async function handleJiraSubmission(
   });
   console.log('[Jira] Issue created:', issue.key);
 
-  // Phase 2: Upload all attachments
-  let uploadedCount = 0;
-  for (const screenshot of payload.screenshots) {
-    try {
-      const blob = dataUrlToBlob(screenshot.dataUrl);
-      await addAttachment(issue.key, blob, screenshot.filename);
-      uploadedCount++;
-      console.log('[Jira] Attached:', screenshot.filename);
-    } catch (err) {
-      console.warn('[Jira] Failed to attach', screenshot.filename, err);
-    }
-  }
+  // Phase 2: Upload attachments
+  const uploadedCount = await uploadAttachments(issue.key, payload, filenames.video);
 
-  if (payload.videoRecordingId && videoFilename) {
-    console.log('[Jira] Fetching video blob for:', payload.videoRecordingId);
-    try {
-      const videoBlob = await getRecordingBlob(payload.videoRecordingId);
-      if (videoBlob) {
-        console.log('[Jira] Video blob size:', videoBlob.size);
-        await addAttachment(issue.key, videoBlob, videoFilename);
-        uploadedCount++;
-        console.log('[Jira] Video attached:', videoFilename);
-      } else {
-        console.log('[Jira] getRecordingBlob returned null');
-      }
-    } catch (err) {
-      console.warn('[Jira] Video attach failed:', err);
-    }
-  } else {
-    console.log('[Jira] No video to upload (recordingId:', payload.videoRecordingId, ')');
-  }
-
-  // Phase 3: Update description with wiki markup (v2 API) for inline images
+  // Phase 3: Update description with wiki markup for inline images
   if (uploadedCount > 0) {
     try {
-      const wikiDescription = buildWikiMarkupDescription(changeSet, allFilenames);
+      const wikiDescription = buildWikiMarkupDescription(changeSet, filenames.all);
       await updateIssueDescriptionWiki(issue.key, wikiDescription);
       console.log('[Jira] Description updated with wiki markup (inline images)');
     } catch (err) {
@@ -499,13 +537,7 @@ async function handleJiraSubmission(
   }
 
   // Save to recent submissions
-  const recentResult = await chrome.storage.local.get(STORAGE_KEYS.RECENT_SUBMISSIONS);
-  const recent: Array<{ key: string; summary: string; createdAt: number }> =
-    recentResult[STORAGE_KEYS.RECENT_SUBMISSIONS] || [];
-  recent.unshift({ key: issue.key, summary, createdAt: Date.now() });
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.RECENT_SUBMISSIONS]: recent.slice(0, 20),
-  });
+  await saveToRecentSubmissions(issue.key, summary);
 
   return issue;
 }

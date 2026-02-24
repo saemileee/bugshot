@@ -5,6 +5,7 @@ export type ExtensionMessage =
   // Screenshot (Content Script <-> Service Worker)
   | { type: 'CAPTURE_SCREENSHOT'; tabId: number }
   | { type: 'SCREENSHOT_CAPTURED'; dataUrl: string }
+  | { type: 'SCREENSHOT_ERROR'; error: string }
 
   // Video Recording
   | { type: 'START_RECORDING'; tabId: number }

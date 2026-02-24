@@ -1,5 +1,5 @@
 import { getCredentials, buildBasicAuth } from './auth';
-import { withRetry } from '@/shared/utils/retry';
+import { withRetry, HttpError } from '@/shared/utils/retry';
 import type { JiraIssuePayload, JiraIssueResponse, JiraAttachment } from '@/shared/types/jira-ticket';
 
 async function getBaseUrl(): Promise<string> {
@@ -31,7 +31,7 @@ async function jiraFetch(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Jira API ${response.status}: ${body}`);
+    throw new HttpError(`Jira API ${response.status}: ${body}`, response.status, body);
   }
 
   return response;
@@ -99,7 +99,7 @@ export async function addAttachment(
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Attachment upload ${response.status}: ${body}`);
+      throw new HttpError(`Attachment upload ${response.status}: ${body}`, response.status, body);
     }
 
     return response.json() as Promise<JiraAttachment[]>;

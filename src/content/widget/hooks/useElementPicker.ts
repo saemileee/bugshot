@@ -158,13 +158,27 @@ export function useElementPicker() {
     // Track scroll / resize
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
-    const raf = setInterval(update, 500); // fallback for layout shifts
+
+    // Use observers instead of polling for layout changes
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(pickedElement);
+
+    // Watch for DOM mutations that might affect layout
+    const mutationObserver = new MutationObserver(update);
+    const parentElement = pickedElement.parentElement || document.body;
+    mutationObserver.observe(parentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+    });
 
     return () => {
       overlay.remove();
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
-      clearInterval(raf);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
     };
   }, [pickedElement]);
 

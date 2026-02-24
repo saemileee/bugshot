@@ -1,4 +1,33 @@
 /**
+ * Structured HTTP error with status code for reliable error handling.
+ */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly body?: string,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+
+  /** Check if this is a client error (4xx) */
+  isClientError(): boolean {
+    return this.status >= 400 && this.status < 500;
+  }
+
+  /** Check if this is a rate limit error (429) */
+  isRateLimitError(): boolean {
+    return this.status === 429;
+  }
+
+  /** Check if this is retryable (server errors or rate limits) */
+  isRetryable(): boolean {
+    return this.status >= 500 || this.status === 429;
+  }
+}
+
+/**
  * Retry a function with exponential backoff.
  */
 export async function withRetry<T>(
@@ -14,11 +43,20 @@ export async function withRetry<T>(
     } catch (err) {
       lastError = err as Error;
 
-      // Don't retry auth errors or client errors (4xx except 429)
-      if (err instanceof Error && err.message.includes('40')) {
-        const statusMatch = err.message.match(/\b(40[0-9])\b/);
-        if (statusMatch && statusMatch[1] !== '429') {
+      // Use structured HttpError for reliable status checking
+      if (err instanceof HttpError) {
+        // Don't retry client errors (4xx) except rate limits (429)
+        if (err.isClientError() && !err.isRateLimitError()) {
           throw err;
+        }
+      } else if (err instanceof Error) {
+        // Fallback: parse status from message for legacy errors
+        const statusMatch = err.message.match(/\b(4\d{2}|5\d{2})\b/);
+        if (statusMatch) {
+          const status = parseInt(statusMatch[1], 10);
+          if (status >= 400 && status < 500 && status !== 429) {
+            throw err;
+          }
         }
       }
 
