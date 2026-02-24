@@ -32,13 +32,15 @@ const SHORTHAND_MAPPINGS: ShorthandMapping[] = [
 function isDefaultValue(prop: string, value: string): boolean {
   const v = value.toLowerCase().trim();
 
-  // Border style 'none' means no border
-  if (prop.includes('border') && prop.includes('style') && v === 'none') {
+  // Only filter border-style: none (all sides must be none for shorthand)
+  // This is checked AFTER collapse, so we check the shorthand property
+  if (prop === 'border-style' && v === 'none') {
     return true;
   }
 
-  // Padding/margin 0 is default
-  if ((prop.startsWith('padding') || prop.startsWith('margin')) && (v === '0px' || v === '0')) {
+  // Only filter padding/margin when ALL sides are 0
+  // This is checked AFTER collapse, so we check the shorthand property
+  if ((prop === 'padding' || prop === 'margin') && (v === '0px' || v === '0')) {
     return true;
   }
 
@@ -71,12 +73,6 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
 
     const values = longhands.map((p) => p.value);
 
-    // Skip if all values are defaults (e.g., all padding-* are 0px)
-    if (values.every((v, i) => isDefaultValue(mapping.longhands[i], v))) {
-      mapping.longhands.forEach((name) => consumed.add(name));
-      continue;
-    }
-
     let shorthandValue: string;
 
     if (mapping.type === 'box' || mapping.type === 'corner') {
@@ -99,14 +95,20 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
       continue;
     }
 
+    // Mark longhands as consumed
+    mapping.longhands.forEach((name) => consumed.add(name));
+
+    // Skip if the collapsed shorthand is a default value (e.g., padding: 0px, border-style: none)
+    if (isDefaultValue(mapping.shorthand, shorthandValue)) {
+      continue;
+    }
+
     result.push({
       property: mapping.shorthand,
       value: shorthandValue,
       priority: longhands[0].priority,
       overridden: overridden,
     });
-
-    mapping.longhands.forEach((name) => consumed.add(name));
   }
 
   // Add remaining properties that weren't collapsed
