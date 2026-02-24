@@ -3,6 +3,9 @@ import { createElement } from 'react';
 import { WidgetRoot } from './widget/WidgetRoot';
 import widgetCSS from './widget/styles/widget.css?inline';
 
+/** Delay before retrying widget injection when DOM body is not ready */
+const DOM_READY_RETRY_DELAY_MS = 10;
+
 function injectWidget() {
   // Remove any stale widget from previous context (hard refresh scenario)
   const existing = document.getElementById('bugshot-root');
@@ -12,8 +15,7 @@ function injectWidget() {
 
   // Wait for body to be available
   if (!document.body) {
-    // Retry after a short delay
-    setTimeout(injectWidget, 10);
+    setTimeout(injectWidget, DOM_READY_RETRY_DELAY_MS);
     return;
   }
 

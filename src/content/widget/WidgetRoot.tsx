@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { FloatingWidget, type ToolbarTab } from './components/FloatingWidget';
 import { ChangesSummary } from './components/ChangesSummary';
 import { StyleEditor } from './components/StyleEditor';
@@ -271,8 +271,8 @@ export function WidgetRoot() {
     ? tracking.status.selector
     : '';
 
-  // ── Footer content (only for changes tab) ──
-  const footerContent = (() => {
+  // ── Footer content (only for changes tab, memoized to avoid unnecessary re-renders) ──
+  const footerContent = useMemo(() => {
     if (activeTab !== 'changes') return null;
 
     if (isEditing) {
@@ -320,7 +320,7 @@ export function WidgetRoot() {
     }
 
     return null;
-  })();
+  }, [activeTab, isEditing, editNote, showPreview, hasContent, handleResetCapture, handleCaptureAfter]);
 
   // ── Panel content based on active tab ──
   const panelContent = (() => {

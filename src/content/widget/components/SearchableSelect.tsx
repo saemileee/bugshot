@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 
 export interface SelectOption {
   value: string;
@@ -32,11 +32,14 @@ export function SearchableSelect({
 
   const selectedOption = options.find((o) => o.value === value);
 
-  // Filter options based on search
-  const filteredOptions = options.filter((o) =>
-    o.label.toLowerCase().includes(search.toLowerCase()) ||
-    o.subLabel?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter options based on search (memoized to avoid re-filtering on unrelated re-renders)
+  const filteredOptions = useMemo(() => {
+    const lowerSearch = search.toLowerCase();
+    return options.filter((o) =>
+      o.label.toLowerCase().includes(lowerSearch) ||
+      o.subLabel?.toLowerCase().includes(lowerSearch)
+    );
+  }, [options, search]);
 
   // All selectable items: empty option (index 0) + filtered options
   const totalItems = filteredOptions.length + 1;
