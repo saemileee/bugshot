@@ -391,22 +391,6 @@ export async function getEpicLinkFieldId(projectKey: string): Promise<string | n
   return null;
 }
 
-/**
- * Get the issue type of a specific issue.
- */
-export async function getIssueType(issueKey: string): Promise<string | null> {
-  try {
-    const response = await jiraFetch(
-      `/rest/api/3/issue/${issueKey}?fields=issuetype`,
-    );
-    const data = await response.json();
-    return (data.fields?.issuetype?.name as string) || null;
-  } catch (err) {
-    console.warn('[Jira] Failed to get issue type:', err);
-    return null;
-  }
-}
-
 export interface JiraUser {
   accountId: string;
   displayName: string;

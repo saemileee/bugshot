@@ -62,5 +62,3 @@ export function createLogger(namespace: string, minLevel?: LogLevel): Logger {
 
 // Pre-configured loggers for common namespaces
 export const jiraLogger = createLogger('Jira');
-export const recordingLogger = createLogger('Recording');
-export const messagingLogger = createLogger('Messaging');

@@ -187,13 +187,9 @@ export function useElementPicker() {
     setIsPicking(true);
   }, []);
 
-  const cancelPicking = useCallback(() => {
-    setIsPicking(false);
-  }, []);
-
   const clearPicked = useCallback(() => {
     setPickedElement(null);
   }, []);
 
-  return { isPicking, pickedElement, startPicking, cancelPicking, clearPicked };
+  return { isPicking, pickedElement, startPicking, clearPicked };
 }
