@@ -146,12 +146,18 @@ export function useElementPicker() {
     ].join(';');
     document.documentElement.appendChild(overlay);
 
+    // Throttled update to prevent excessive layout recalculations
+    let rafId: number | null = null;
     const update = () => {
-      const rect = pickedElement.getBoundingClientRect();
-      overlay.style.top = rect.top + 'px';
-      overlay.style.left = rect.left + 'px';
-      overlay.style.width = rect.width + 'px';
-      overlay.style.height = rect.height + 'px';
+      if (rafId !== null) return; // Already scheduled
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const rect = pickedElement.getBoundingClientRect();
+        overlay.style.top = rect.top + 'px';
+        overlay.style.left = rect.left + 'px';
+        overlay.style.width = rect.width + 'px';
+        overlay.style.height = rect.height + 'px';
+      });
     };
     update();
 
@@ -159,21 +165,20 @@ export function useElementPicker() {
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
 
-    // Use observers instead of polling for layout changes
+    // Use ResizeObserver for the picked element only (lightweight)
     const resizeObserver = new ResizeObserver(update);
     resizeObserver.observe(pickedElement);
 
-    // Watch for DOM mutations that might affect layout
+    // MutationObserver: only watch the picked element itself, NOT subtree
+    // This dramatically reduces CPU usage on heavy pages
     const mutationObserver = new MutationObserver(update);
-    const parentElement = pickedElement.parentElement || document.body;
-    mutationObserver.observe(parentElement, {
-      childList: true,
-      subtree: true,
+    mutationObserver.observe(pickedElement, {
       attributes: true,
       attributeFilter: ['style', 'class'],
     });
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       overlay.remove();
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);

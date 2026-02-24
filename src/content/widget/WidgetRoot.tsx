@@ -14,7 +14,6 @@ import { useScreenshot } from "./hooks/useScreenshot";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { CSSChange } from "@/shared/types/css-change";
 import type { ExtensionMessage } from "@/shared/types/messages";
-import { STORAGE_KEYS } from "@/shared/constants";
 
 export type WidgetTab = "capture" | "describe" | "changes" | "submit";
 
@@ -25,28 +24,8 @@ export interface ScreenshotData {
 }
 
 export function WidgetRoot() {
-  // ── Widget visibility (persisted) ──
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    // Load persisted visibility
-    chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
-      const stored = result[STORAGE_KEYS.WIDGET_VISIBLE];
-      if (stored !== undefined) setVisible(stored);
-    });
-
-    // Listen for storage changes (reliable across all tabs)
-    const onChanged = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      area: string
-    ) => {
-      if (area === "local" && STORAGE_KEYS.WIDGET_VISIBLE in changes) {
-        setVisible(changes[STORAGE_KEYS.WIDGET_VISIBLE].newValue ?? true);
-      }
-    };
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
-  }, []);
+  // Note: Widget visibility is handled by content-script.ts which mounts/unmounts
+  // this entire component. No need to track visibility state here.
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<ToolbarTab>(null);
@@ -121,14 +100,8 @@ export function WidgetRoot() {
     if (picker.isPicking) setActiveTab(null);
   }, [picker.isPicking]);
 
-  // ── Clear picked element when widget becomes invisible ──
-  useEffect(() => {
-    if (!visible) {
-      picker.clearPicked();
-      tracking.reset();
-      setActiveTab(null);
-    }
-  }, [visible, picker, tracking]);
+  // Note: Cleanup when widget becomes invisible is now handled by content-script.ts
+  // unmounting the entire React tree. No need for visibility-based cleanup here.
 
   // ── Handle tab change (clear picked element when panel closes) ──
   const handleTabChange = useCallback(
@@ -630,8 +603,6 @@ export function WidgetRoot() {
 
     return null;
   })();
-
-  if (!visible) return null;
 
   return (
     <FloatingWidget
