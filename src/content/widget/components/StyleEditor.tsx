@@ -48,6 +48,7 @@ function isDefaultValue(prop: string, value: string): boolean {
 }
 
 function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
+  // First, deduplicate input (last value wins)
   const propMap = new Map<string, RuleProperty>();
   for (const p of props) {
     propMap.set(p.property, p);
@@ -57,6 +58,12 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
   const consumed = new Set<string>();
 
   for (const mapping of SHORTHAND_MAPPINGS) {
+    // If shorthand already exists in props, mark longhands as consumed and skip collapse
+    if (propMap.has(mapping.shorthand)) {
+      mapping.longhands.forEach((name) => consumed.add(name));
+      continue;
+    }
+
     const longhands = mapping.longhands.map((name) => propMap.get(name)).filter(Boolean) as RuleProperty[];
 
     // Only collapse if ALL longhands are present
@@ -111,8 +118,8 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
     });
   }
 
-  // Add remaining properties that weren't collapsed
-  for (const p of props) {
+  // Add remaining properties that weren't collapsed (iterate deduplicated Map)
+  for (const p of propMap.values()) {
     if (!consumed.has(p.property)) {
       // Skip default values for certain properties
       if (!isDefaultValue(p.property, p.value)) {
@@ -132,7 +139,7 @@ async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | nul
       { type: 'GET_ELEMENT_STYLES', selector },
       (response) => {
         if (chrome.runtime.lastError) {
-          console.warn('[StyleEditor] CDP fetch failed:', chrome.runtime.lastError.message);
+          console.warn('[StyleEditor] CDP request failed:', chrome.runtime.lastError.message);
           resolve(null);
           return;
         }
@@ -462,6 +469,8 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
 
       if (cancelled) return;
 
+      // Fallback: CDP failed, using direct DOM access (less accurate)
+      console.warn('[StyleEditor] CDP failed or returned empty, using DOM fallback (may be less accurate)');
       // Fallback to direct DOM access
       const collected = collectRuleBlocks(element);
       if (collected.length <= 1) {

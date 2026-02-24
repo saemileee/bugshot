@@ -591,16 +591,39 @@ async function handleDryRunSubmission(
  * Get element styles via Chrome DevTools Protocol (CDP)
  * This provides accurate CSS information including shorthand properties
  */
+/**
+ * Escape special characters in CSS selector for CDP querySelector
+ * Tailwind classes like `max-w-[36rem]` and `!w-full` need escaping
+ * But preserve selector structure (combinators: >, +, ~, spaces)
+ */
+function escapeCSSSelector(selector: string): string {
+  // Split by combinators and spaces, escape each part, then rejoin
+  // Combinators: > (child), + (adjacent sibling), ~ (general sibling), space (descendant)
+  return selector
+    .split(/(\s*[>+~]\s*|\s+)/)
+    .map(part => {
+      // If it's a combinator or whitespace, keep as-is
+      if (/^(\s*[>+~]\s*|\s+)$/.test(part)) {
+        return part;
+      }
+      // Escape special characters in class/id names: [ ] !
+      // These are common in Tailwind CSS
+      return part.replace(/([[\]!])/g, '\\$1');
+    })
+    .join('');
+}
+
 async function getElementStylesViaCDP(tabId: number, selector: string): Promise<CDPStyleResult> {
   const target = { tabId };
+  const escapedSelector = escapeCSSSelector(selector);
 
   // Attach debugger
   await chrome.debugger.attach(target, '1.3');
 
   try {
-    // Enable CSS domain
-    await chrome.debugger.sendCommand(target, 'CSS.enable');
+    // Enable DOM first, then CSS (DOM must be enabled before CSS operations)
     await chrome.debugger.sendCommand(target, 'DOM.enable');
+    await chrome.debugger.sendCommand(target, 'CSS.enable');
 
     // Get document root
     const docResult = await chrome.debugger.sendCommand(target, 'DOM.getDocument') as {
@@ -610,11 +633,11 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
     // Find element by selector
     const queryResult = await chrome.debugger.sendCommand(target, 'DOM.querySelector', {
       nodeId: docResult.root.nodeId,
-      selector,
+      selector: escapedSelector,
     }) as { nodeId: number };
 
     if (!queryResult.nodeId) {
-      throw new Error(`Element not found: ${selector}`);
+      throw new Error(`Element not found: ${escapedSelector}`);
     }
 
     // Get matched styles
@@ -636,15 +659,16 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
       }>;
     };
 
-    // Parse inline styles
-    const inlineStyles: Array<{ name: string; value: string }> = [];
+    // Parse inline styles (deduplicate using Map)
+    const inlineStyleMap = new Map<string, { name: string; value: string }>();
     if (stylesResult.inlineStyle?.cssProperties) {
       for (const prop of stylesResult.inlineStyle.cssProperties) {
         if (!prop.disabled && prop.value) {
-          inlineStyles.push({ name: prop.name, value: prop.value });
+          inlineStyleMap.set(prop.name, { name: prop.name, value: prop.value });
         }
       }
     }
+    const inlineStyles = Array.from(inlineStyleMap.values());
 
     // Parse matched rules
     const matchedRules: CDPStyleRule[] = [];
@@ -654,16 +678,18 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
         // Skip user-agent styles
         if (rule.origin === 'user-agent') continue;
 
-        const properties: Array<{ name: string; value: string; important: boolean }> = [];
+        // Use Map to deduplicate properties (last value wins)
+        const propMap = new Map<string, { name: string; value: string; important: boolean }>();
         for (const prop of rule.style.cssProperties) {
           if (!prop.disabled && prop.value) {
-            properties.push({
+            propMap.set(prop.name, {
               name: prop.name,
               value: prop.value,
               important: prop.important ?? false,
             });
           }
         }
+        const properties = Array.from(propMap.values());
 
         if (properties.length > 0) {
           matchedRules.push({

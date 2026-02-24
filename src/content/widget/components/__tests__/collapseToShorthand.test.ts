@@ -51,6 +51,12 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
   const consumed = new Set<string>();
 
   for (const mapping of SHORTHAND_MAPPINGS) {
+    // If shorthand already exists in props, mark longhands as consumed and skip collapse
+    if (propMap.has(mapping.shorthand)) {
+      mapping.longhands.forEach((name) => consumed.add(name));
+      continue;
+    }
+
     const longhands = mapping.longhands.map((name) => propMap.get(name)).filter(Boolean) as RuleProperty[];
 
     // Only collapse if ALL longhands are present
@@ -104,8 +110,8 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
     });
   }
 
-  // Add remaining properties that weren't collapsed
-  for (const p of props) {
+  // Add remaining properties that weren't collapsed (iterate deduplicated Map)
+  for (const p of propMap.values()) {
     if (!consumed.has(p.property)) {
       // Skip default values for certain properties
       if (!isDefaultValue(p.property, p.value)) {
@@ -391,6 +397,51 @@ describe('collapseToShorthand', () => {
       expect(result.map(r => r.property)).toContain('border-radius');
       expect(result.map(r => r.property)).toContain('padding');
       expect(result.map(r => r.property)).toContain('color');
+    });
+
+    it('should NOT duplicate longhands when shorthand already exists', () => {
+      // CDP sometimes returns both shorthand AND longhands
+      const input = [
+        prop('border-radius', '8px'),
+        prop('border-top-left-radius', '8px'),
+        prop('border-top-right-radius', '8px'),
+        prop('border-bottom-right-radius', '8px'),
+        prop('border-bottom-left-radius', '8px'),
+      ];
+      const result = collapseToShorthand(input);
+      // Should only have the shorthand, longhands consumed
+      expect(result).toHaveLength(1);
+      expect(result[0].property).toBe('border-radius');
+      expect(result[0].value).toBe('8px');
+    });
+
+    it('should NOT duplicate padding longhands when shorthand already exists', () => {
+      const input = [
+        prop('padding', '10px 20px'),
+        prop('padding-top', '10px'),
+        prop('padding-right', '20px'),
+        prop('padding-bottom', '10px'),
+        prop('padding-left', '20px'),
+      ];
+      const result = collapseToShorthand(input);
+      expect(result).toHaveLength(1);
+      expect(result[0].property).toBe('padding');
+      expect(result[0].value).toBe('10px 20px');
+    });
+
+    it('should deduplicate same property appearing multiple times', () => {
+      // CDP sometimes returns the same property multiple times
+      const input = [
+        prop('pointer-events', 'auto'),
+        prop('pointer-events', 'none'),
+        prop('display', 'flex'),
+        prop('display', 'block'),
+      ];
+      const result = collapseToShorthand(input);
+      expect(result).toHaveLength(2);
+      // Last value wins
+      expect(result.find(r => r.property === 'pointer-events')?.value).toBe('none');
+      expect(result.find(r => r.property === 'display')?.value).toBe('block');
     });
   });
 });
