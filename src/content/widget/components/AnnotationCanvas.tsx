@@ -162,7 +162,7 @@ export function AnnotationCanvas({ imageSrc, onSave, onCancel }: AnnotationCanva
 
       {/* Action buttons */}
       <div className="flex gap-2 mt-2">
-        <Button variant="primary" className="flex-1" onClick={handleSave}>
+        <Button variant="default" className="flex-1" onClick={handleSave}>
           Save Annotation
         </Button>
         <Button variant="secondary" onClick={onCancel}>
