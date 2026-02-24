@@ -16,6 +16,7 @@ import { startRecording, stopRecording, getRecordingBlob } from '../recording/ma
 import { STORAGE_KEYS } from '@/shared/constants';
 import { generateSummary, buildFullDescription, buildWikiMarkupDescription } from '@/shared/utils/jira-formatter';
 import { dataUrlToBlob } from '@/shared/utils/screenshot-utils';
+import { jiraLogger } from '@/shared/utils/logger';
 import type { EpicConfig } from '@/shared/types/jira-ticket';
 import type { ChangeSet } from '@/shared/types/css-change';
 import {
@@ -448,27 +449,27 @@ async function uploadAttachments(
       const blob = dataUrlToBlob(screenshot.dataUrl);
       await addAttachment(issueKey, blob, screenshot.filename);
       uploadedCount++;
-      console.log('[Jira] Attached:', screenshot.filename);
+      jiraLogger.info('Attached:', screenshot.filename);
     } catch (err) {
-      console.warn('[Jira] Failed to attach', screenshot.filename, err);
+      jiraLogger.warn('Failed to attach', screenshot.filename, err);
     }
   }
 
   // Upload video if present
   if (payload.videoRecordingId && videoFilename) {
-    console.log('[Jira] Fetching video blob for:', payload.videoRecordingId);
+    jiraLogger.info('Fetching video blob for:', payload.videoRecordingId);
     try {
       const videoBlob = await getRecordingBlob(payload.videoRecordingId);
       if (videoBlob) {
-        console.log('[Jira] Video blob size:', videoBlob.size);
+        jiraLogger.info('Video blob size:', videoBlob.size);
         await addAttachment(issueKey, videoBlob, videoFilename);
         uploadedCount++;
-        console.log('[Jira] Video attached:', videoFilename);
+        jiraLogger.info('Video attached:', videoFilename);
       } else {
-        console.log('[Jira] getRecordingBlob returned null');
+        jiraLogger.info('getRecordingBlob returned null');
       }
     } catch (err) {
-      console.warn('[Jira] Video attach failed:', err);
+      jiraLogger.warn('Video attach failed:', err);
     }
   }
 
@@ -501,7 +502,7 @@ async function handleJiraSubmission(
   const changeSet = createChangeSetFromPayload(payload);
   const filenames = collectAttachmentFilenames(payload);
 
-  console.log('[Jira] Submission start:', {
+  jiraLogger.info('Submission start:', {
     changes: payload.changes.length,
     screenshots: payload.screenshots.length,
     screenshotFiles: filenames.all,
@@ -520,7 +521,7 @@ async function handleJiraSubmission(
     description,
     parentKey: epicConfig.parentKey || undefined,
   });
-  console.log('[Jira] Issue created:', issue.key);
+  jiraLogger.info('Issue created:', issue.key);
 
   // Phase 2: Upload attachments
   const uploadedCount = await uploadAttachments(issue.key, payload, filenames.video);
@@ -530,9 +531,9 @@ async function handleJiraSubmission(
     try {
       const wikiDescription = buildWikiMarkupDescription(changeSet, filenames.all);
       await updateIssueDescriptionWiki(issue.key, wikiDescription);
-      console.log('[Jira] Description updated with wiki markup (inline images)');
+      jiraLogger.info('Description updated with wiki markup (inline images)');
     } catch (err) {
-      console.warn('[Jira] Wiki description update failed:', err);
+      jiraLogger.warn('Wiki description update failed:', err);
     }
   }
 
