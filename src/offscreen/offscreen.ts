@@ -49,6 +49,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ dataUrl });
       });
       return true; // async
+
+    case 'delete-recording':
+      deleteRecordingFromDB(message.recordingId)
+        .then(() => sendResponse({ success: true }))
+        .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+      return true; // async
   }
 });
 
@@ -119,9 +125,10 @@ async function startRecording() {
 
     const recordingId = await storeRecording(finalBlob);
 
-    // Convert to data URL for preview (skip if > 50MB)
+    // Convert to data URL for preview (skip if > 10MB to prevent memory issues)
+    // For larger videos, UI should show a placeholder and stream from IndexedDB when needed
     let dataUrl: string | undefined;
-    if (finalBlob.size < 50_000_000) {
+    if (finalBlob.size < 10_000_000) {
       dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -213,3 +220,49 @@ async function getRecordingFromDB(recordingId: string): Promise<Blob | null> {
     request.onerror = () => resolve(null);
   });
 }
+
+/**
+ * Delete a recording from IndexedDB.
+ * Should be called after submission or when user discards the recording.
+ */
+async function deleteRecordingFromDB(recordingId: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('recordings', 'readwrite');
+    const store = tx.objectStore('recordings');
+    store.delete(recordingId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Clean up old recordings (older than 24 hours).
+ * This prevents IndexedDB from growing indefinitely.
+ */
+async function cleanupOldRecordings(): Promise<void> {
+  const db = await openDB();
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+  return new Promise((resolve) => {
+    const tx = db.transaction('recordings', 'readwrite');
+    const store = tx.objectStore('recordings');
+    const request = store.openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor) {
+        const record = cursor.value as { id: string; createdAt: number };
+        if (record.createdAt < oneDayAgo) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve(); // Don't fail on cleanup errors
+  });
+}
+
+// Run cleanup on document load
+cleanupOldRecordings().catch(console.warn);

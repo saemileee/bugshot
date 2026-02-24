@@ -87,6 +87,7 @@ export function FloatingWidget({
         x: e.clientX - barPos.left,
         y: e.clientY + barPos.bottom,
       };
+      setIsActiveDrag(true);
       e.preventDefault();
     },
     [barPos]
@@ -100,12 +101,18 @@ export function FloatingWidget({
         x: e.clientX + panelPos.right,
         y: e.clientY - panelPos.top,
       };
+      setIsActiveDrag(true);
       e.preventDefault();
     },
     [panelPos]
   );
 
+  // Only attach drag listeners when actively dragging (memory optimization)
+  const [isActiveDrag, setIsActiveDrag] = useState(false);
+
   useEffect(() => {
+    if (!isActiveDrag) return;
+
     const move = (e: MouseEvent) => {
       if (isDragging.current === "bar") {
         setBarPos({
@@ -136,6 +143,7 @@ export function FloatingWidget({
     };
     const up = () => {
       isDragging.current = false;
+      setIsActiveDrag(false);
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
@@ -143,7 +151,7 @@ export function FloatingWidget({
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
-  }, []);
+  }, [isActiveDrag]);
 
   // ── Panel resize (bottom-left corner) ──
   const handleResizeDown = useCallback(
