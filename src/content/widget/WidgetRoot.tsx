@@ -52,9 +52,23 @@ export function WidgetRoot() {
   const [editNote, setEditNote] = useState("");
   const [recordError, setRecordError] = useState<string | null>(null);
 
+  // Ref to track current recording ID for cleanup
+  const recordingIdRef = useRef<string | null>(null);
+  recordingIdRef.current = recordingId;
+
   // ── Port message handler ──
   const handlePortMessage = useCallback((msg: ExtensionMessage) => {
     if (msg.type === "RECORDING_COMPLETE") {
+      // Delete old recording if exists (new recording replaces it)
+      const oldRecordingId = recordingIdRef.current;
+      if (oldRecordingId && oldRecordingId !== msg.recordingId) {
+        // Fire and forget - delete old recording from IndexedDB
+        chrome.runtime.sendMessage({
+          type: "DELETE_RECORDING",
+          recordingId: oldRecordingId,
+        }).catch(() => { /* ignore */ });
+      }
+
       setRecordingId(msg.recordingId);
       setRecordingDataUrl(msg.dataUrl ?? null);
       setRecordingSize(msg.size ?? null);
@@ -134,6 +148,20 @@ export function WidgetRoot() {
     tracking.reset();
     picker.clearPicked();
   }, [recordingId, deleteRecordingFromDB, tracking, picker]);
+
+  // ── Cleanup on unmount (widget deactivated) ──
+  useEffect(() => {
+    return () => {
+      // Delete recording from IndexedDB when widget is deactivated
+      const currentRecordingId = recordingIdRef.current;
+      if (currentRecordingId) {
+        chrome.runtime.sendMessage({
+          type: "DELETE_RECORDING",
+          recordingId: currentRecordingId,
+        }).catch(() => { /* ignore */ });
+      }
+    };
+  }, []);
 
   const isEditing = tracking.status.state === "before_captured";
   const hasContent =
