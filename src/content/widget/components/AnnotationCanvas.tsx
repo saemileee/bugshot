@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useAnnotation, type AnnotationTool, type AnnotationColor } from '../hooks/useAnnotation';
+import { cn } from '@/shared/utils/cn';
+import { Button } from './ui/button';
+import { Undo, Trash2 } from 'lucide-react';
 
 interface AnnotationCanvasProps {
   imageSrc: string;
@@ -72,11 +75,15 @@ export function AnnotationCanvas({ imageSrc, onSave, onCancel }: AnnotationCanva
   return (
     <div>
       {/* Toolbar */}
-      <div className="qa-annotation-toolbar mb-2">
+      <div className="flex items-center gap-1 p-2 bg-gray-800 rounded-md mb-2">
         {TOOLS.map((t) => (
           <button
             key={t.id}
-            className={`qa-annotation-tool ${tool === t.id ? 'active' : ''}`}
+            className={cn(
+              'w-7 h-7 flex items-center justify-center rounded cursor-pointer bg-transparent border-none text-slate-400',
+              'hover:bg-gray-700 hover:text-slate-200',
+              tool === t.id && 'bg-blue-600 text-white'
+            )}
             onClick={() => setTool(t.id)}
             title={t.label}
           >
@@ -86,44 +93,49 @@ export function AnnotationCanvas({ imageSrc, onSave, onCancel }: AnnotationCanva
           </button>
         ))}
 
-        <div className="qa-annotation-divider" />
+        <div className="w-px h-5 bg-gray-600 mx-0.5" />
 
         {COLORS.map((c) => (
           <button
             key={c}
-            className={`qa-annotation-color ${color === c ? 'active' : ''}`}
+            className={cn(
+              'w-5 h-5 rounded-full cursor-pointer border-2 border-transparent',
+              color === c && 'border-white'
+            )}
             style={{ backgroundColor: c }}
             onClick={() => setColor(c)}
           />
         ))}
 
-        <div className="qa-annotation-divider" />
+        <div className="w-px h-5 bg-gray-600 mx-0.5" />
 
         <button
-          className="qa-annotation-tool"
+          className={cn(
+            'w-7 h-7 flex items-center justify-center rounded cursor-pointer bg-transparent border-none text-slate-400',
+            'hover:bg-gray-700 hover:text-slate-200',
+            !canUndo && 'opacity-50 cursor-not-allowed'
+          )}
           onClick={undo}
           disabled={!canUndo}
           title="Undo"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 7v6h6" />
-            <path d="M21 17a9 9 0 00-9-9H3" />
-          </svg>
+          <Undo className="w-4 h-4" />
         </button>
 
         <button
-          className="qa-annotation-tool"
+          className={cn(
+            'w-7 h-7 flex items-center justify-center rounded cursor-pointer bg-transparent border-none text-slate-400',
+            'hover:bg-gray-700 hover:text-slate-200'
+          )}
           onClick={clearAll}
           title="Clear All"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
-          </svg>
+          <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
       {/* Canvas area */}
-      <div className="qa-screenshot-container" style={{ position: 'relative' }}>
+      <div className="relative border border-gray-200 rounded-md overflow-hidden bg-gray-50">
         <canvas
           ref={bgCanvasRef}
           style={{
@@ -150,12 +162,12 @@ export function AnnotationCanvas({ imageSrc, onSave, onCancel }: AnnotationCanva
 
       {/* Action buttons */}
       <div className="flex gap-2 mt-2">
-        <button className="qa-btn qa-btn-primary flex-1" onClick={handleSave}>
+        <Button variant="primary" className="flex-1" onClick={handleSave}>
           Save Annotation
-        </button>
-        <button className="qa-btn qa-btn-secondary" onClick={onCancel}>
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

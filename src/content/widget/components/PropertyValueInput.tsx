@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { cn } from '@/shared/utils/cn';
 
 interface PropertyValueInputProps {
   property: string;
@@ -250,7 +251,7 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
   // Scroll to the active token when dropdown opens
   useEffect(() => {
     if (tokenDropdownOpen && tokenDropdownRef.current) {
-      const active = tokenDropdownRef.current.querySelector('.qa-sp-token-option.active');
+      const active = tokenDropdownRef.current.querySelector('[data-active="true"]');
       if (active) {
         active.scrollIntoView({ block: 'nearest' });
       }
@@ -258,12 +259,12 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
   }, [tokenDropdownOpen]);
 
   return (
-    <span className="qa-sp-pvi">
+    <span className="flex items-center flex-1 min-w-0 gap-0.5 relative">
       {/* Color swatch */}
       {isColor && !overridden && (
         <>
           <span
-            className="qa-sp-swatch"
+            className="w-3 h-3 rounded-sm border border-black/15 cursor-pointer flex-shrink-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[0_0_0_2px_#93c5fd,inset_0_0_0_1px_rgba(255,255,255,0.3)]"
             style={{ backgroundColor: value }}
             onClick={handleSwatchClick}
             title="Click to pick color"
@@ -271,7 +272,7 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
           <input
             ref={colorInputRef}
             type="color"
-            className="qa-sp-color-input"
+            className="absolute opacity-0 w-0 h-0 pointer-events-none"
             value={colorToHex(value)}
             onChange={(e) => onChangeRef.current(e.target.value)}
           />
@@ -284,14 +285,14 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
           {/* Backdrop overlay to close dropdown on outside click */}
           {tokenDropdownOpen && (
             <div
-              className="qa-sp-token-backdrop"
+              className="fixed inset-0 z-[99]"
               onMouseDown={() => setTokenDropdownOpen(false)}
             />
           )}
-          <span className="qa-sp-token-ref" style={tokenDropdownOpen ? { zIndex: 100 } : undefined}>
+          <span className="relative flex items-center flex-shrink-0" style={tokenDropdownOpen ? { zIndex: 100 } : undefined}>
             <button
               type="button"
-              className="qa-sp-token-badge"
+              className="font-mono text-[9px] text-violet-600 bg-violet-50 border border-violet-200 rounded px-1 cursor-pointer whitespace-nowrap max-w-[120px] overflow-hidden text-ellipsis leading-4 hover:bg-violet-100 hover:border-violet-300"
               onMouseDown={(e) => {
                 e.stopPropagation();
                 setTokenDropdownOpen((p) => !p);
@@ -303,8 +304,12 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
 
             {/* Token dropdown */}
             {tokenDropdownOpen && similarTokens.length > 0 && (
-              <div ref={tokenDropdownRef} className="qa-sp-token-dropdown" onMouseDown={(e) => e.stopPropagation()}>
-                <div className="qa-sp-token-dropdown-title">
+              <div
+                ref={tokenDropdownRef}
+                className="absolute top-full left-0 z-[100] min-w-[220px] max-w-[300px] max-h-[200px] overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg mt-1 p-1"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="text-[9px] text-gray-400 px-2 pt-1 pb-0.5 font-semibold uppercase tracking-wide">
                   {similarTokens.length > 1
                     ? `${getTokenPrefix(varRef.token)}-* (${similarTokens.length})`
                     : varRef.token}
@@ -313,7 +318,11 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
                   <button
                     type="button"
                     key={t.name}
-                    className={`qa-sp-token-option ${t.name === varRef.token ? 'active' : ''}`}
+                    data-active={t.name === varRef.token}
+                    className={cn(
+                      'flex items-center justify-between gap-2 w-full px-2 py-1 border-none bg-transparent cursor-pointer rounded text-left font-mono text-[10px] hover:bg-slate-50',
+                      t.name === varRef.token && 'bg-violet-50'
+                    )}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       const fallback = varRef.fallback ? `, ${varRef.fallback}` : '';
@@ -321,10 +330,10 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
                       setTokenDropdownOpen(false);
                     }}
                   >
-                    <span className="qa-sp-token-option-name">{t.name}</span>
-                    <span className="qa-sp-token-option-value">
+                    <span className="text-violet-600 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{t.name}</span>
+                    <span className="text-gray-400 flex-shrink-0 flex items-center gap-0.5 text-[9px] max-w-[100px] overflow-hidden text-ellipsis whitespace-nowrap">
                       {isColorValue(t.value) && (
-                        <span className="qa-sp-swatch-mini" style={{ backgroundColor: t.value }} />
+                        <span className="inline-block w-2 h-2 rounded-sm border border-black/10 align-middle mr-1 flex-shrink-0" style={{ backgroundColor: t.value }} />
                       )}
                       {t.value}
                     </span>
@@ -340,7 +349,10 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
       <input
         ref={inputRef}
         type="text"
-        className={`qa-sp-pv ${numParsed ? 'qa-sp-pv-num' : ''}`}
+        className={cn(
+          'prop-value text-slate-800 border-none outline-none font-mono text-[11px] bg-transparent px-0.5 rounded min-w-[40px] flex-1 hover:bg-slate-100 focus:bg-white focus:shadow-[0_0_0_1px_#93c5fd]',
+          numParsed && 'cursor-ns-resize focus:cursor-text'
+        )}
         value={value}
         onChange={(e) => onChangeRef.current(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -349,7 +361,7 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
 
       {/* Numeric unit badge */}
       {numParsed && numParsed.unit && !overridden && (
-        <span className="qa-sp-unit">{numParsed.unit}</span>
+        <span className="font-mono text-[9px] text-gray-400 flex-shrink-0 select-none">{numParsed.unit}</span>
       )}
     </span>
   );

@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
+import { cn } from '@/shared/utils/cn';
+import { MousePointer, Camera, Circle, Square, LayoutGrid, Settings } from 'lucide-react';
 
 export type ToolbarTab = 'changes' | 'settings' | null;
 
@@ -60,7 +62,7 @@ export function FloatingWidget({
 
   // ── Toolbar drag ──
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.qa-bar-btn')) return;
+    if ((e.target as HTMLElement).closest('[data-bar-btn]')) return;
     isDragging.current = 'bar';
     dragOffset.current = { x: e.clientX - barPos.left, y: e.clientY + barPos.bottom };
     e.preventDefault();
@@ -129,7 +131,12 @@ export function FloatingWidget({
       {/* ── Y-axis Panel (draggable) ── */}
       {showPanel && (
         <div
-          className={`qa-panel qa-slide-in ${panelFlash ? 'qa-panel-flash' : ''}`}
+          className={cn(
+            'fixed z-[99999] bg-white rounded-xl overflow-hidden pointer-events-auto flex flex-col',
+            'shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]',
+            'animate-slide-in',
+            panelFlash && 'animate-panel-flash'
+          )}
           style={{
             right: panelPos.right,
             top: panelPos.top,
@@ -138,36 +145,46 @@ export function FloatingWidget({
           }}
         >
           {/* Drag handle */}
-          <div className="qa-panel-drag" onMouseDown={handlePanelDragDown}>
-            <svg width="24" height="4" viewBox="0 0 24 4" fill="currentColor" opacity="0.3">
+          <div
+            className="flex-shrink-0 flex items-center justify-center h-[18px] cursor-grab active:cursor-grabbing select-none"
+            onMouseDown={handlePanelDragDown}
+          >
+            <svg width="24" height="4" viewBox="0 0 24 4" fill="currentColor" className="opacity-30">
               <rect x="0" y="0" width="24" height="1.5" rx="1" />
               <rect x="0" y="3" width="24" height="1.5" rx="1" />
             </svg>
           </div>
 
-          <div className="qa-panel-scroll">
+          <div className="flex-1 overflow-y-auto flex flex-col">
             {children}
           </div>
 
           {footer && (
-            <div className="qa-panel-footer">
+            <div className="flex-shrink-0 border-t border-slate-100 px-4 py-3 bg-[#fafbfc]">
               {footer}
             </div>
           )}
 
           {/* Resize handle (bottom-left) */}
-          <div className="qa-resize-handle" onMouseDown={handleResizeDown} />
+          <div
+            className="absolute bottom-0 left-0 w-4 h-4 z-10 cursor-nesw-resize after:absolute after:bottom-1 after:left-1 after:w-2 after:h-2 after:opacity-50 hover:after:opacity-100"
+            style={{
+              backgroundImage: 'linear-gradient(225deg, transparent 3px, #cbd5e1 3px, #cbd5e1 4px, transparent 4px)',
+              backgroundSize: '5px 5px',
+            }}
+            onMouseDown={handleResizeDown}
+          />
         </div>
       )}
 
       {/* ── X-axis Toolbar (always visible) ── */}
       <div
-        className="qa-bar"
+        className="fixed z-[99999] flex items-center gap-0.5 p-1 bg-white rounded-xl shadow-[0_2px_12px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] pointer-events-auto select-none"
         style={{ left: barPos.left, bottom: barPos.bottom }}
         onMouseDown={handleBarMouseDown}
       >
         {/* Drag grip */}
-        <div className="qa-bar-grip">
+        <div className="flex items-center justify-center w-3.5 h-8 text-slate-300 cursor-grab active:cursor-grabbing flex-shrink-0">
           <svg width="6" height="14" viewBox="0 0 6 14" fill="currentColor">
             <circle cx="1.5" cy="1.5" r="1" /><circle cx="4.5" cy="1.5" r="1" />
             <circle cx="1.5" cy="5" r="1" /><circle cx="4.5" cy="5" r="1" />
@@ -176,81 +193,93 @@ export function FloatingWidget({
           </svg>
         </div>
 
-        <div className="qa-bar-divider" />
+        <div className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
 
         {/* Pick Element */}
         <button
-          className={`qa-bar-btn ${isPicking ? 'active' : ''} ${isPreviewMode ? 'disabled' : ''}`}
+          data-bar-btn
+          className={cn(
+            'relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0',
+            'hover:bg-slate-100 hover:text-slate-600',
+            isPicking && 'bg-slate-100 text-slate-800',
+            isPreviewMode && 'opacity-40 cursor-not-allowed'
+          )}
           onClick={isPreviewMode ? flashPanel : onPickElement}
           title={isPicking ? 'Picking...' : isPreviewMode ? 'Exit preview to pick elements' : 'Pick Element'}
         >
           {isPicking ? (
-            <span className="qa-bar-dot" />
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse-opacity" />
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-              <path d="M13 13l6 6" />
-            </svg>
+            <MousePointer className="w-4 h-4" />
           )}
         </button>
 
         {/* Screenshot */}
         <button
-          className={`qa-bar-btn ${isCapturing ? 'active' : ''} ${isPreviewMode ? 'disabled' : ''}`}
+          data-bar-btn
+          className={cn(
+            'relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0',
+            'hover:bg-slate-100 hover:text-slate-600',
+            isCapturing && 'bg-slate-100 text-slate-800',
+            isPreviewMode && 'opacity-40 cursor-not-allowed'
+          )}
           onClick={isPreviewMode ? flashPanel : onScreenshot}
           disabled={isCapturing}
           title={isPreviewMode ? 'Exit preview to take screenshots' : 'Take Screenshot'}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-            <circle cx="12" cy="13" r="4" />
-          </svg>
+          <Camera className="w-4 h-4" />
         </button>
 
         {/* Record */}
         <button
-          className={`qa-bar-btn ${isRecording ? 'recording' : ''} ${isPreviewMode && !isRecording ? 'disabled' : ''}`}
+          data-bar-btn
+          className={cn(
+            'relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0',
+            'hover:bg-slate-100 hover:text-slate-600',
+            isRecording && 'bg-red-50 text-red-500 animate-pulse-opacity',
+            isPreviewMode && !isRecording && 'opacity-40 cursor-not-allowed'
+          )}
           onClick={isPreviewMode && !isRecording ? flashPanel : onRecordToggle}
           title={isRecording ? 'Stop Recording' : isPreviewMode ? 'Exit preview to record' : 'Record Screen'}
         >
           {isRecording ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
+            <Square className="w-4 h-4 fill-current" />
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="4" fill="currentColor" />
-            </svg>
+            <Circle className="w-4 h-4" />
           )}
         </button>
 
-        <div className="qa-bar-divider" />
+        <div className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
 
         {/* Changes tab */}
         <button
-          className={`qa-bar-btn ${activeTab === 'changes' ? 'active' : ''}`}
+          data-bar-btn
+          className={cn(
+            'relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0',
+            'hover:bg-slate-100 hover:text-slate-600',
+            activeTab === 'changes' && 'bg-slate-100 text-slate-800'
+          )}
           onClick={() => handleTabClick('changes')}
           title="Changes"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <line x1="3" y1="9" x2="21" y2="9" />
-            <line x1="9" y1="21" x2="9" y2="9" />
-          </svg>
-          {hasContent && <span className="qa-bar-badge" />}
+          <LayoutGrid className="w-4 h-4" />
+          {hasContent && (
+            <span className="absolute top-1 right-1 w-[7px] h-[7px] rounded-full bg-blue-500 border-[1.5px] border-white" />
+          )}
         </button>
 
         {/* Settings tab */}
         <button
-          className={`qa-bar-btn ${activeTab === 'settings' ? 'active' : ''}`}
+          data-bar-btn
+          className={cn(
+            'relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0',
+            'hover:bg-slate-100 hover:text-slate-600',
+            activeTab === 'settings' && 'bg-slate-100 text-slate-800'
+          )}
           onClick={() => handleTabClick('settings')}
           title="Settings"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
+          <Settings className="w-4 h-4" />
         </button>
       </div>
     </>

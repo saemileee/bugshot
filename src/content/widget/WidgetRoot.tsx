@@ -277,20 +277,26 @@ export function WidgetRoot() {
 
     if (isEditing) {
       return (
-        <div className="qa-footer-editing">
+        <div className="flex flex-col gap-2">
           <textarea
-            className="qa-textarea"
+            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-md bg-white text-slate-800 resize-none outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
             value={editNote}
             onChange={(e) => setEditNote(e.target.value)}
             placeholder="Describe what should change..."
             spellCheck={false}
             rows={2}
           />
-          <div className="qa-footer-actions">
-            <button className="qa-btn qa-btn-ghost" onClick={handleResetCapture}>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-transparent border-none rounded-md cursor-pointer transition-colors hover:bg-gray-100 hover:text-gray-700"
+              onClick={handleResetCapture}
+            >
               Cancel
             </button>
-            <button className="qa-btn qa-btn-next qa-footer-primary" onClick={handleCaptureAfter}>
+            <button
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-blue-500 border-none rounded-md cursor-pointer transition-colors hover:bg-blue-600"
+              onClick={handleCaptureAfter}
+            >
               Save & Continue
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6" />
@@ -305,9 +311,9 @@ export function WidgetRoot() {
 
     if (hasContent) {
       return (
-        <div className="qa-footer-actions">
+        <div className="flex items-center justify-end gap-2">
           <button
-            className="qa-btn qa-btn-next qa-footer-primary"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-blue-500 border-none rounded-md cursor-pointer transition-colors hover:bg-blue-600"
             onClick={() => setShowPreview(true)}
           >
             Review & Submit
@@ -351,8 +357,8 @@ export function WidgetRoot() {
         <>
           {/* ── Page title ── */}
           {isEditing ? (
-            <div className="qa-page-title">
-              <span className="qa-page-title-icon">
+            <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800">
+              <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 text-slate-500">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -361,8 +367,8 @@ export function WidgetRoot() {
               Edit Element
             </div>
           ) : (
-            <div className="qa-page-title">
-              <span className="qa-page-title-icon">
+            <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800">
+              <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 text-slate-500">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
@@ -370,11 +376,10 @@ export function WidgetRoot() {
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
               </span>
-              <span style={{ flex: 1 }}>Create Report</span>
+              <span className="flex-1">Create Report</span>
               {hasContent && (
                 <button
-                  className="qa-btn qa-btn-ghost"
-                  style={{ fontSize: 11, padding: '4px 8px' }}
+                  className="inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-500 bg-transparent border-none rounded cursor-pointer transition-colors hover:bg-gray-100 hover:text-gray-700"
                   onClick={() => {
                     setChanges([]);
                     setScreenshots([]);
@@ -394,16 +399,16 @@ export function WidgetRoot() {
 
           {/* ── Editing bar ── */}
           {isEditing && (
-            <div className="qa-editing-bar">
-              <span className="qa-editing-bar-label">Editing</span>
-              <code className="qa-editing-bar-selector">{editingSelector}</code>
+            <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200">
+              <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Editing</span>
+              <code className="flex-1 text-[11px] font-mono text-amber-700 bg-amber-100 px-2 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap">{editingSelector}</code>
             </div>
           )}
 
           {/* ── Editing mode: Styles + Describe ── */}
           {isEditing && picker.pickedElement && (
-            <section className="qa-section qa-section-styles">
-              <h3 className="qa-section-title">Styles</h3>
+            <section className="flex-1 flex flex-col min-h-0 border-b border-gray-200">
+              <h3 className="px-4 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-wide border-b border-gray-100">Styles</h3>
               <StyleEditor
                 element={picker.pickedElement}
                 selector={editingSelector}
@@ -414,18 +419,18 @@ export function WidgetRoot() {
 
           {/* ── Normal mode ── */}
           {!isEditing && (
-            <div className="qa-report-content">
+            <div className="flex-1 overflow-y-auto">
               {/* CSS Changes Section */}
-              <div className="qa-report-section">
-                <div className="qa-report-section-header">
-                  <h3 className="qa-report-section-title">
+              <div className="border-b border-gray-100">
+                <div className="px-4 py-2 bg-slate-50 border-b border-gray-100">
+                  <h3 className="flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
                     CSS Changes
                     {changes.length > 0 && (
-                      <span className="qa-section-count">{changes.length}</span>
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-semibold text-blue-600 bg-blue-100 rounded-full">{changes.length}</span>
                     )}
                   </h3>
                 </div>
-                <div className="qa-report-section-body">
+                <div className="px-4 py-3">
                   <ChangesSummary
                     changes={changes}
                     captureStatus={tracking.status}
@@ -435,27 +440,27 @@ export function WidgetRoot() {
               </div>
 
               {/* Media Section (Screenshots + Video) */}
-              <div className="qa-report-section">
-                <div className="qa-report-section-header">
-                  <h3 className="qa-report-section-title">
+              <div className="border-b border-gray-100">
+                <div className="px-4 py-2 bg-slate-50 border-b border-gray-100">
+                  <h3 className="flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
                     Media
                     {(screenshots.length > 0 || recordingId) && (
-                      <span className="qa-section-count">
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-semibold text-blue-600 bg-blue-100 rounded-full">
                         {screenshots.length + (recordingId ? 1 : 0)}
                       </span>
                     )}
                   </h3>
                 </div>
-                <div className="qa-report-section-body">
+                <div className="px-4 py-3">
                   {/* Recording status/errors */}
                   {recordError && (
-                    <div className="qa-status qa-status-error" style={{ marginBottom: 8 }}>
-                      <span style={{ flex: 1 }}>Recording error: {recordError}</span>
+                    <div className="flex items-center gap-2 p-2.5 mb-2 rounded-md bg-red-50 text-red-700 text-xs">
+                      <span className="flex-1">Recording error: {recordError}</span>
                       <button
-                        className="qa-remove-btn"
+                        className="flex items-center justify-center w-5 h-5 p-0 border-none bg-transparent cursor-pointer text-red-400 hover:text-red-600"
                         onClick={() => setRecordError(null)}
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <line x1="18" y1="6" x2="6" y2="18" />
                           <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
@@ -463,18 +468,18 @@ export function WidgetRoot() {
                     </div>
                   )}
                   {isRecording && (
-                    <div className="qa-status qa-status-error" style={{ marginBottom: 8 }}>
-                      <span className="qa-recording-dot" />
+                    <div className="flex items-center gap-2 p-2.5 mb-2 rounded-md bg-red-50 text-red-700 text-xs">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse-opacity" />
                       <span>Recording in progress...</span>
                     </div>
                   )}
                   {isConverting && conversionProgress && (
-                    <div className="qa-status qa-status-info" style={{ marginBottom: 8 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ marginBottom: 4 }}>{conversionProgress.message}</div>
-                        <div className="qa-progress-bar">
+                    <div className="flex items-center gap-2 p-2.5 mb-2 rounded-md bg-blue-50 text-blue-700 text-xs">
+                      <div className="flex-1">
+                        <div className="mb-1">{conversionProgress.message}</div>
+                        <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden">
                           <div
-                            className="qa-progress-bar-fill"
+                            className="h-full bg-blue-500 rounded-full transition-all"
                             style={{ width: `${conversionProgress.progress}%` }}
                           />
                         </div>
@@ -483,15 +488,15 @@ export function WidgetRoot() {
                   )}
 
                   {/* Media list container */}
-                  <div className="qa-media-list">
+                  <div className="flex flex-col gap-3">
                     {/* Video recording */}
                     {recordingId && !isRecording && recordingDataUrl && (
-                      <div className="qa-media-item">
-                        <div className="qa-media-item-header">
-                          <span className="qa-media-item-label">
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <span className="text-xs font-medium text-gray-700">
                             Video
                             {recordingSize != null && (
-                              <span className="qa-media-item-size">
+                              <span className="ml-1.5 text-[10px] text-gray-400">
                                 {recordingSize < 1_000_000
                                   ? `${Math.round(recordingSize / 1024)}KB`
                                   : `${(recordingSize / 1_000_000).toFixed(1)}MB`}
@@ -499,7 +504,7 @@ export function WidgetRoot() {
                             )}
                           </span>
                           <button
-                            className="qa-remove-btn"
+                            className="flex items-center justify-center w-6 h-6 p-0 border-none bg-transparent cursor-pointer text-gray-400 hover:text-red-500"
                             onClick={() => {
                               setRecordingId(null);
                               setRecordingDataUrl(null);
@@ -507,14 +512,14 @@ export function WidgetRoot() {
                             }}
                             title="Remove"
                           >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                             </svg>
                           </button>
                         </div>
                         <video
-                          className="qa-media-preview"
+                          className="w-full block"
                           src={recordingDataUrl}
                           controls
                           playsInline
@@ -524,36 +529,35 @@ export function WidgetRoot() {
 
                     {/* Screenshots */}
                     {screenshots.map((ss, i) => (
-                      <div key={i} className="qa-media-item">
-                        <div className="qa-media-item-header">
-                          <span className="qa-media-item-label">Screenshot {i + 1}</span>
-                          <div className="qa-media-item-actions">
+                      <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <span className="text-xs font-medium text-gray-700">Screenshot {i + 1}</span>
+                          <div className="flex items-center gap-1">
                             <button
-                              className="qa-btn qa-btn-ghost"
+                              className="inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-500 bg-transparent border-none rounded cursor-pointer transition-colors hover:bg-gray-100 hover:text-gray-700"
                               onClick={() => setAnnotatingIndex(i)}
-                              style={{ padding: '4px 8px' }}
                             >
                               Annotate
                             </button>
                             <button
-                              className="qa-remove-btn"
+                              className="flex items-center justify-center w-6 h-6 p-0 border-none bg-transparent cursor-pointer text-gray-400 hover:text-red-500"
                               onClick={() => handleRemoveScreenshot(i)}
                               title="Remove"
                             >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                               </svg>
                             </button>
                           </div>
                         </div>
-                        <img className="qa-media-preview" src={ss.annotated || ss.original} alt={`Screenshot ${i + 1}`} />
+                        <img className="w-full block" src={ss.annotated || ss.original} alt={`Screenshot ${i + 1}`} />
                       </div>
                     ))}
 
                     {/* Empty state */}
                     {!recordingId && screenshots.length === 0 && !isRecording && !isConverting && (
-                      <div className="qa-empty-hint-compact">
+                      <div className="text-center py-4 text-gray-400 text-xs">
                         Use toolbar to capture screenshots or record video
                       </div>
                     )}
@@ -561,7 +565,7 @@ export function WidgetRoot() {
 
                   {/* Annotation mode */}
                   {annotatingIndex !== null && screenshots[annotatingIndex] && (
-                    <div style={{ marginTop: 12 }}>
+                    <div className="mt-3">
                       <ScreenshotCapture
                         screenshots={screenshots}
                         editingIndex={annotatingIndex}
@@ -575,11 +579,11 @@ export function WidgetRoot() {
               </div>
 
               {/* Notes Section */}
-              <div className="qa-report-section">
-                <div className="qa-report-section-header">
-                  <h3 className="qa-report-section-title">Notes</h3>
+              <div className="border-b border-gray-100">
+                <div className="px-4 py-2 bg-slate-50 border-b border-gray-100">
+                  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Notes</h3>
                 </div>
-                <div className="qa-report-section-body">
+                <div className="px-4 py-3">
                   <ManualDescription
                     description={description}
                     onDescriptionChange={setDescription}

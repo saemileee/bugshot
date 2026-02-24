@@ -102,25 +102,25 @@ describe('PropertyNameInput', () => {
 
     // First item should be highlighted initially
     const items = screen.getAllByRole('button');
-    expect(items[0]).toHaveClass('highlighted');
+    expect(items[0]).toHaveClass('bg-blue-50');
 
     // Press ArrowDown
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(items[1]).toHaveClass('highlighted');
+    expect(items[1]).toHaveClass('bg-blue-50');
 
     // Press ArrowUp
     fireEvent.keyDown(input, { key: 'ArrowUp' });
-    expect(items[0]).toHaveClass('highlighted');
+    expect(items[0]).toHaveClass('bg-blue-50');
   });
 
   it('should highlight matching text', () => {
     render(<PropertyNameInput {...defaultProps} value="pad" />);
 
-    // Check that matches are highlighted
+    // Check that matches are highlighted with Tailwind classes
     const matchSpans = screen.getAllByText('pad');
     expect(matchSpans.length).toBeGreaterThan(0);
     matchSpans.forEach((span) => {
-      expect(span).toHaveClass('qa-sp-autocomplete-match');
+      expect(span).toHaveClass('bg-blue-100');
     });
   });
 
@@ -144,7 +144,7 @@ describe('PropertyNameInput', () => {
     const items = screen.getAllByRole('button');
     fireEvent.mouseEnter(items[2]);
 
-    expect(items[2]).toHaveClass('highlighted');
+    expect(items[2]).toHaveClass('bg-blue-50');
   });
 
   it('should limit results to 15 items', () => {

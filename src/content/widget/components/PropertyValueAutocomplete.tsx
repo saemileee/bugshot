@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { cn } from '@/shared/utils/cn';
 
 // CSS property value suggestions
 const CSS_VALUE_MAP: Record<string, string[]> = {
@@ -229,7 +230,7 @@ export const PropertyValueAutocomplete = forwardRef<PropertyValueAutocompleteHan
 
     useEffect(() => {
       if (!isOpen || !dropdownRef.current) return;
-      const items = dropdownRef.current.querySelectorAll('.qa-sp-autocomplete-item');
+      const items = dropdownRef.current.querySelectorAll('[data-item]');
       const highlighted = items[highlightedIndex];
       if (highlighted) {
         highlighted.scrollIntoView({ block: 'nearest' });
@@ -298,10 +299,10 @@ export const PropertyValueAutocomplete = forwardRef<PropertyValueAutocompleteHan
     const showDropdown = isOpen && filteredValues.length > 0 && allValues.length > 0;
 
     return (
-      <span className="qa-sp-autocomplete-wrap">
+      <span className="relative inline-flex">
         <input
           ref={inputRef}
-          className="qa-sp-add-v"
+          className="border-none outline-none font-mono text-[11px] bg-amber-50 px-0.5 py-px rounded min-w-[50px] flex-1 text-slate-800 focus:shadow-[0_0_0_1px_#93c5fd] focus:bg-white"
           placeholder="value"
           value={value}
           onChange={handleInputChange}
@@ -312,12 +313,19 @@ export const PropertyValueAutocomplete = forwardRef<PropertyValueAutocompleteHan
         />
 
         {showDropdown && (
-          <div ref={dropdownRef} className="qa-sp-autocomplete-dropdown qa-sp-autocomplete-dropdown-value">
+          <div
+            ref={dropdownRef}
+            className="absolute top-full left-0 z-[100] min-w-[140px] max-w-[200px] max-h-[200px] overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg mt-0.5 p-1"
+          >
             {filteredValues.map((val, index) => (
               <button
                 key={val}
                 type="button"
-                className={`qa-sp-autocomplete-item ${index === highlightedIndex ? 'highlighted' : ''}`}
+                data-item
+                className={cn(
+                  'block w-full px-2 py-1 border-none bg-transparent cursor-pointer rounded text-left font-mono text-[11px] text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis',
+                  index === highlightedIndex && 'bg-blue-50'
+                )}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   handleItemClick(val);
@@ -346,7 +354,7 @@ function highlightQuery(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, index)}
-      <span className="qa-sp-autocomplete-match">{text.slice(index, index + lowerQuery.length)}</span>
+      <span className="text-blue-600 font-semibold bg-blue-100 rounded px-px">{text.slice(index, index + lowerQuery.length)}</span>
       {text.slice(index + lowerQuery.length)}
     </>
   );

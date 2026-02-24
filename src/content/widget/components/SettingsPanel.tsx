@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { STORAGE_KEYS } from '@/shared/constants';
 import type { EpicConfig } from '@/shared/types/jira-ticket';
+import { cn } from '@/shared/utils/cn';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
 
 interface JiraProject { id: string; key: string; name: string }
 interface JiraIssueType { id: string; name: string; subtask: boolean }
@@ -132,40 +137,51 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
   }, [config, authStatus]);
 
   return (
-    <div className="qa-integration-card">
-      <button className="qa-integration-header" onClick={() => setOpen(!open)}>
-        <div className="qa-integration-header-left">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <button
+        className="flex items-center justify-between w-full px-3 py-2.5 border-none bg-slate-50 cursor-pointer font-inherit transition-colors hover:bg-slate-100"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center gap-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M11.53 2H11.49C10.61 2 9.91 2.7 9.91 3.58C9.91 4.46 10.61 5.16 11.49 5.16H11.53C12.41 5.16 13.11 4.46 13.11 3.58C13.11 2.7 12.41 2 11.53 2Z" fill="#2684FF"/>
             <path d="M20.58 12.42L12.47 4.31C12.19 4.03 11.81 4.03 11.53 4.31L3.42 12.42C3.14 12.7 3.14 13.08 3.42 13.36L11.53 21.47C11.81 21.75 12.19 21.75 12.47 21.47L20.58 13.36C20.86 13.08 20.86 12.7 20.58 12.42Z" fill="#2684FF"/>
           </svg>
-          <span className="qa-integration-name">Jira</span>
-          {authStatus.authenticated && <span className="qa-integration-badge-ok">Connected</span>}
+          <span className="text-xs font-semibold text-slate-800">Jira</span>
+          {authStatus.authenticated && (
+            <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full border border-green-200">Connected</span>
+          )}
         </div>
-        <svg className={`qa-section-chevron ${open ? 'open' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <ChevronDown className={cn('w-3 h-3 text-gray-400 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="qa-integration-body">
+        <div className="p-3 border-t border-gray-200">
           {authStatus.authenticated ? (
             <>
-              <div className="qa-settings-status qa-settings-status-ok">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              <div className="flex items-center gap-1.5 text-xs p-2 rounded-lg bg-green-50 text-green-600 mb-2">
+                <Check className="w-3.5 h-3.5" />
                 Connected to {authStatus.siteUrl || 'Jira'}
               </div>
-              <button className="qa-btn qa-btn-ghost qa-btn-block" onClick={handleDisconnect} style={{ marginTop: 8 }}>Disconnect</button>
+              <Button variant="ghost" className="w-full mb-3" onClick={handleDisconnect}>Disconnect</Button>
 
               {fetchError && (
-                <div className="qa-settings-status qa-settings-status-error" style={{ marginBottom: 8 }}>
+                <div className="flex items-center gap-2 text-xs p-2 rounded-lg bg-red-50 text-red-600 mb-2">
                   {fetchError}
-                  <button className="qa-btn qa-btn-ghost" onClick={loadProjects} style={{ marginLeft: 'auto', padding: '0 6px', fontSize: 11 }}>Retry</button>
+                  <Button variant="ghost" size="sm" onClick={loadProjects} className="ml-auto px-1.5 text-[11px]">Retry</Button>
                 </div>
               )}
 
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Project</label>
-                {loadingProjects ? <div className="qa-settings-loading">Loading projects...</div> : (
-                  <select className="qa-settings-input" value={config.projectKey} onChange={(e) => handleProjectChange(e.target.value)}>
+              <div className="mb-2.5">
+                <Label>Project</Label>
+                {loadingProjects ? (
+                  <div className="text-xs text-gray-400 p-1.5 bg-slate-50 rounded-md border border-gray-200">Loading projects...</div>
+                ) : (
+                  <select
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md outline-none bg-white text-slate-800 cursor-pointer appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width=%2710%27%20height=%276%27%20viewBox=%270%200%2010%206%27%20fill=%27none%27%20xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cpath%20d=%27M1%201L5%205L9%201%27%20stroke=%27%2394a3b8%27%20stroke-width=%271.5%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27/%3E%3C/svg%3E')] bg-no-repeat bg-[right_8px_center] pr-7 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    value={config.projectKey}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                  >
                     <option value="">Select a project</option>
                     {projects.map((p) => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
                   </select>
@@ -173,50 +189,63 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
               </div>
 
               {config.projectKey && (
-                <div className="qa-settings-field">
-                  <label className="qa-settings-label">Issue Type</label>
-                  {loadingDetails ? <div className="qa-settings-loading">Loading...</div> : (
-                    <select className="qa-settings-input" value={config.issueType} onChange={(e) => setConfig((prev) => ({ ...prev, issueType: e.target.value }))}>
+                <div className="mb-2.5">
+                  <Label>Issue Type</Label>
+                  {loadingDetails ? (
+                    <div className="text-xs text-gray-400 p-1.5 bg-slate-50 rounded-md border border-gray-200">Loading...</div>
+                  ) : (
+                    <select
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md outline-none bg-white text-slate-800 cursor-pointer appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width=%2710%27%20height=%276%27%20viewBox=%270%200%2010%206%27%20fill=%27none%27%20xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cpath%20d=%27M1%201L5%205L9%201%27%20stroke=%27%2394a3b8%27%20stroke-width=%271.5%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27/%3E%3C/svg%3E')] bg-no-repeat bg-[right_8px_center] pr-7 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                      value={config.issueType}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, issueType: e.target.value }))}
+                    >
                       {issueTypes.map((t) => <option key={t.id} value={t.name}>{t.name}{t.subtask ? ' (Sub-task)' : ''}</option>)}
                     </select>
                   )}
                 </div>
               )}
 
-              <button className={`qa-btn ${saved ? 'qa-btn-success' : 'qa-btn-primary'} qa-btn-block`} onClick={handleSave} disabled={!config.projectKey}>
+              <Button
+                variant={saved ? 'primary' : 'primary'}
+                className="w-full"
+                onClick={handleSave}
+                disabled={!config.projectKey}
+              >
                 {saved ? 'Saved!' : 'Save Settings'}
-              </button>
+              </Button>
             </>
           ) : (
             <>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Site URL</label>
-                <input className="qa-settings-input" type="text" placeholder="mycompany.atlassian.net" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Site URL</Label>
+                <Input type="text" placeholder="mycompany.atlassian.net" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} />
               </div>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Email</label>
-                <input className="qa-settings-input" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Email</Label>
+                <Input type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">
+              <div className="mb-2.5">
+                <Label className="flex items-center justify-between">
                   API Token
-                  <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="qa-settings-link">Get token</a>
-                </label>
-                <div className="qa-settings-token-row">
-                  <input className="qa-settings-input" type={showToken ? 'text' : 'password'} placeholder="Paste API token" value={apiToken} onChange={(e) => setApiToken(e.target.value)} spellCheck={false} />
-                  <button className="qa-btn qa-btn-ghost qa-settings-token-toggle" onClick={() => setShowToken((p) => !p)} title={showToken ? 'Hide' : 'Show'}>
-                    {showToken ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                    )}
-                  </button>
+                  <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="text-[10px] font-normal text-blue-500 hover:underline">Get token</a>
+                </Label>
+                <div className="flex gap-1">
+                  <Input
+                    type={showToken ? 'text' : 'password'}
+                    placeholder="Paste API token"
+                    value={apiToken}
+                    onChange={(e) => setApiToken(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button variant="ghost" size="icon" onClick={() => setShowToken((p) => !p)} title={showToken ? 'Hide' : 'Show'}>
+                    {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </Button>
                 </div>
               </div>
-              {authError && <div className="qa-settings-status qa-settings-status-error">{authError}</div>}
-              <button className="qa-btn qa-btn-primary qa-btn-block" onClick={handleConnect} disabled={authLoading} style={{ marginTop: 8 }}>
+              {authError && <div className="text-xs p-2 rounded-lg bg-red-50 text-red-600 mb-2">{authError}</div>}
+              <Button variant="primary" className="w-full mt-2" onClick={handleConnect} disabled={authLoading}>
                 {authLoading ? 'Connecting...' : 'Connect'}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -284,63 +313,64 @@ function GithubSection() {
   }, []);
 
   return (
-    <div className="qa-integration-card">
-      <button className="qa-integration-header" onClick={() => setOpen(!open)}>
-        <div className="qa-integration-header-left">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <button
+        className="flex items-center justify-between w-full px-3 py-2.5 border-none bg-slate-50 cursor-pointer font-inherit transition-colors hover:bg-slate-100"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center gap-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
           </svg>
-          <span className="qa-integration-name">GitHub</span>
-          {connected && <span className="qa-integration-badge-ok">Connected</span>}
+          <span className="text-xs font-semibold text-slate-800">GitHub</span>
+          {connected && (
+            <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full border border-green-200">Connected</span>
+          )}
         </div>
-        <svg className={`qa-section-chevron ${open ? 'open' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <ChevronDown className={cn('w-3 h-3 text-gray-400 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="qa-integration-body">
+        <div className="p-3 border-t border-gray-200">
           {connected ? (
             <>
-              <div className="qa-settings-status qa-settings-status-ok">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              <div className="flex items-center gap-1.5 text-xs p-2 rounded-lg bg-green-50 text-green-600 mb-2">
+                <Check className="w-3.5 h-3.5" />
                 Connected as {displayName}
-                {owner && repo && <span style={{ marginLeft: 4, opacity: 0.7 }}>({owner}/{repo})</span>}
+                {owner && repo && <span className="opacity-70 ml-1">({owner}/{repo})</span>}
               </div>
-              <button className="qa-btn qa-btn-ghost qa-btn-block" onClick={handleDisconnect} style={{ marginTop: 8 }}>Disconnect</button>
+              <Button variant="ghost" className="w-full" onClick={handleDisconnect}>Disconnect</Button>
             </>
           ) : (
             <>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">
+              <div className="mb-2.5">
+                <Label className="flex items-center justify-between">
                   Personal Access Token
-                  <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener noreferrer" className="qa-settings-link">Create token</a>
-                </label>
-                <div className="qa-settings-token-row">
-                  <input className="qa-settings-input" type={showToken ? 'text' : 'password'} placeholder="ghp_..." value={token} onChange={(e) => setToken(e.target.value)} spellCheck={false} />
-                  <button className="qa-btn qa-btn-ghost qa-settings-token-toggle" onClick={() => setShowToken((p) => !p)} title={showToken ? 'Hide' : 'Show'}>
-                    {showToken ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                    )}
-                  </button>
+                  <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener noreferrer" className="text-[10px] font-normal text-blue-500 hover:underline">Create token</a>
+                </Label>
+                <div className="flex gap-1">
+                  <Input type={showToken ? 'text' : 'password'} placeholder="ghp_..." value={token} onChange={(e) => setToken(e.target.value)} className="flex-1" />
+                  <Button variant="ghost" size="icon" onClick={() => setShowToken((p) => !p)} title={showToken ? 'Hide' : 'Show'}>
+                    {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </Button>
                 </div>
               </div>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Repository Owner</label>
-                <input className="qa-settings-input" type="text" placeholder="octocat" value={owner} onChange={(e) => setOwner(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Repository Owner</Label>
+                <Input type="text" placeholder="octocat" value={owner} onChange={(e) => setOwner(e.target.value)} />
               </div>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Repository Name</label>
-                <input className="qa-settings-input" type="text" placeholder="my-project" value={repo} onChange={(e) => setRepo(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Repository Name</Label>
+                <Input type="text" placeholder="my-project" value={repo} onChange={(e) => setRepo(e.target.value)} />
               </div>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Labels <span className="qa-settings-hint">optional, comma-separated</span></label>
-                <input className="qa-settings-input" type="text" placeholder="bugshot, bug" value={labels} onChange={(e) => setLabels(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Labels <span className="text-[10px] font-normal text-gray-400">optional, comma-separated</span></Label>
+                <Input type="text" placeholder="bugshot, bug" value={labels} onChange={(e) => setLabels(e.target.value)} />
               </div>
-              {error && <div className="qa-settings-status qa-settings-status-error">{error}</div>}
-              <button className="qa-btn qa-btn-primary qa-btn-block" onClick={handleConnect} disabled={loading} style={{ marginTop: 8 }}>
+              {error && <div className="text-xs p-2 rounded-lg bg-red-50 text-red-600 mb-2">{error}</div>}
+              <Button variant="primary" className="w-full mt-2" onClick={handleConnect} disabled={loading}>
                 {loading ? 'Connecting...' : saved ? 'Saved!' : 'Connect'}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -398,39 +428,44 @@ function N8nSection() {
   }, []);
 
   return (
-    <div className="qa-integration-card">
-      <button className="qa-integration-header" onClick={() => setOpen(!open)}>
-        <div className="qa-integration-header-left">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <button
+        className="flex items-center justify-between w-full px-3 py-2.5 border-none bg-slate-50 cursor-pointer font-inherit transition-colors hover:bg-slate-100"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center gap-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <rect width="24" height="24" rx="4" fill="#EA4B71"/>
             <text x="4" y="17" fill="white" fontSize="12" fontWeight="bold">n8n</text>
           </svg>
-          <span className="qa-integration-name">N8N</span>
-          {connected && <span className="qa-integration-badge-ok">Connected</span>}
+          <span className="text-xs font-semibold text-slate-800">N8N</span>
+          {connected && (
+            <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full border border-green-200">Connected</span>
+          )}
         </div>
-        <svg className={`qa-section-chevron ${open ? 'open' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <ChevronDown className={cn('w-3 h-3 text-gray-400 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="qa-integration-body">
+        <div className="p-3 border-t border-gray-200">
           {connected ? (
             <>
-              <div className="qa-settings-status qa-settings-status-ok">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              <div className="flex items-center gap-1.5 text-xs p-2 rounded-lg bg-green-50 text-green-600 mb-2">
+                <Check className="w-3.5 h-3.5" />
                 Connected to {displayName || 'N8N'}
               </div>
-              <button className="qa-btn qa-btn-ghost qa-btn-block" onClick={handleDisconnect} style={{ marginTop: 8 }}>Disconnect</button>
+              <Button variant="ghost" className="w-full" onClick={handleDisconnect}>Disconnect</Button>
             </>
           ) : (
             <>
-              <div className="qa-settings-field">
-                <label className="qa-settings-label">Webhook URL</label>
-                <input className="qa-settings-input" type="url" placeholder="https://your-n8n.app/webhook/..." value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} spellCheck={false} />
+              <div className="mb-2.5">
+                <Label>Webhook URL</Label>
+                <Input type="url" placeholder="https://your-n8n.app/webhook/..." value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} />
               </div>
-              {error && <div className="qa-settings-status qa-settings-status-error">{error}</div>}
-              <button className="qa-btn qa-btn-primary qa-btn-block" onClick={handleConnect} disabled={loading} style={{ marginTop: 8 }}>
+              {error && <div className="text-xs p-2 rounded-lg bg-red-50 text-red-600 mb-2">{error}</div>}
+              <Button variant="primary" className="w-full mt-2" onClick={handleConnect} disabled={loading}>
                 {loading ? 'Verifying...' : saved ? 'Verified!' : 'Connect'}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -462,36 +497,30 @@ export function SettingsPanel() {
   }, [titlePrefix]);
 
   return (
-    <div className="qa-settings">
-      <section className="qa-settings-section">
-        <h3 className="qa-settings-heading">General</h3>
-        <div className="qa-settings-field">
-          <label className="qa-settings-label">Title Prefix (말머리)</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              className="qa-settings-input"
+    <div className="py-1">
+      <section className="px-4 py-3 border-b border-slate-100">
+        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">General</h3>
+        <div className="mb-2.5">
+          <Label>Title Prefix (말머리)</Label>
+          <div className="flex gap-2">
+            <Input
               type="text"
               placeholder="[BugShot]"
               value={titlePrefix}
               onChange={(e) => setTitlePrefix(e.target.value)}
-              spellCheck={false}
-              style={{ flex: 1 }}
+              className="flex-1"
             />
-            <button
-              className={`qa-btn ${prefixSaved ? 'qa-btn-success' : 'qa-btn-primary'}`}
-              onClick={handlePrefixSave}
-              style={{ whiteSpace: 'nowrap' }}
-            >
+            <Button variant={prefixSaved ? 'primary' : 'primary'} onClick={handlePrefixSave}>
               {prefixSaved ? 'Saved!' : 'Save'}
-            </button>
+            </Button>
           </div>
-          <div className="qa-settings-field-hint">Example: {titlePrefix} Page Title - bug description</div>
+          <div className="text-[11px] text-gray-400 mt-1">Example: {titlePrefix} Page Title - bug description</div>
         </div>
       </section>
 
-      <section className="qa-settings-section">
-        <h3 className="qa-settings-heading">Integrations</h3>
-        <div className="qa-integrations-list">
+      <section className="px-4 py-3 border-b border-slate-100">
+        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">Integrations</h3>
+        <div className="flex flex-col gap-2">
           <JiraSection defaultOpen />
           <GithubSection />
           <N8nSection />
@@ -499,13 +528,13 @@ export function SettingsPanel() {
       </section>
 
       {recent.length > 0 && (
-        <section className="qa-settings-section">
-          <h3 className="qa-settings-heading">Recent Issues</h3>
-          <div className="qa-settings-recent">
+        <section className="px-4 py-3">
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">Recent Issues</h3>
+          <div className="flex flex-col gap-1.5">
             {recent.map((item, i) => (
-              <div key={i} className="qa-settings-recent-item">
-                <code className="qa-settings-recent-key">{item.key}</code>
-                <span className="qa-settings-recent-summary">{item.summary}</span>
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <code className="font-mono text-[11px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">{item.key}</code>
+                <span className="text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{item.summary}</span>
               </div>
             ))}
           </div>

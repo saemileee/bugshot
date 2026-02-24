@@ -1,3 +1,6 @@
+import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+
 interface ManualDescriptionProps {
   description: string;
   onDescriptionChange: (desc: string) => void;
@@ -9,9 +12,8 @@ export function ManualDescription({
 }: ManualDescriptionProps) {
   return (
     <div>
-      <label className="qa-label">Description</label>
-      <textarea
-        className="qa-textarea"
+      <Label>Description</Label>
+      <Textarea
         placeholder="Describe the issue you found...&#10;&#10;e.g., The font-size on the header should be 16px instead of 14px, and the spacing between nav items needs to be 12px."
         value={description}
         onChange={(e) => onDescriptionChange(e.target.value)}

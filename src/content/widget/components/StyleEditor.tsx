@@ -3,6 +3,7 @@ import { PropertyValueInput } from './PropertyValueInput';
 import { PropertyNameInput } from './PropertyNameInput';
 import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
 import type { CDPStyleResult } from '@/shared/types/messages';
+import { cn } from '@/shared/utils/cn';
 
 interface StyleEditorProps {
   element: Element;
@@ -351,13 +352,13 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
   const ruleCount = blocks.filter((b) => !b.isInline).length;
 
   return (
-    <div className="qa-sp">
+    <div className="flex flex-col min-h-0 flex-1">
       {/* className */}
-      <div className="qa-sp-field">
-        <span className="qa-sp-field-label">.cls</span>
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50">
+        <span className="text-[11px] font-semibold text-indigo-500 bg-indigo-50 px-1.5 py-px rounded flex-shrink-0">.cls</span>
         <input
           type="text"
-          className="qa-sp-class-input"
+          className="flex-1 font-mono text-[11px] border-none outline-none bg-transparent text-slate-800 px-1 py-0.5 rounded min-w-0 focus:bg-white focus:shadow-[0_0_0_1px_#93c5fd]"
           value={className}
           onChange={(e) => handleClassNameChange(e.target.value)}
           placeholder="(no class)"
@@ -367,11 +368,11 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
 
       {/* textContent */}
       {textContent !== '' && (
-        <div className="qa-sp-field">
-          <span className="qa-sp-field-label">text</span>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50">
+          <span className="text-[11px] font-semibold text-indigo-500 bg-indigo-50 px-1.5 py-px rounded flex-shrink-0">text</span>
           <input
             type="text"
-            className="qa-sp-class-input"
+            className="flex-1 font-mono text-[11px] border-none outline-none bg-transparent text-slate-800 px-1 py-0.5 rounded min-w-0 focus:bg-white focus:shadow-[0_0_0_1px_#93c5fd]"
             value={textContent}
             onChange={(e) => handleTextContentChange(e.target.value)}
             spellCheck={false}
@@ -381,57 +382,66 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="qa-sp-loading">Loading styles...</div>
+        <div className="py-6 px-4 text-center text-gray-500 text-[13px]">Loading styles...</div>
       )}
 
       {/* Error state */}
       {cdpError && (
-        <div className="qa-sp-error">
-          <span className="qa-sp-error-icon">⚠</span>
+        <div className="flex items-start gap-2 p-3 m-2 bg-red-50 border border-red-200 rounded-md text-red-700 text-xs leading-relaxed">
+          <span className="flex-shrink-0 text-sm">⚠</span>
           <span>{cdpError}</span>
         </div>
       )}
 
       {/* Filter bar */}
       {!isLoading && !cdpError && (
-        <div className="qa-sp-bar">
+        <div className="flex items-center justify-between px-2 py-0.5 border-b border-gray-200 bg-slate-100 text-[10px] text-gray-500">
           <span>{ruleCount} matched rule{ruleCount !== 1 ? 's' : ''}</span>
           <span>CDP</span>
         </div>
       )}
 
       {/* Rule blocks */}
-      <div className="qa-sp-scroll">
+      <div className="overflow-y-auto flex-1 min-h-0">
         {!isLoading && !cdpError && blocks.map((block) => (
-          <div key={block.id} className="qa-sp-rule">
-            <div className="qa-sp-rule-header">
-              <span className={`qa-sp-sel ${block.isInline ? 'qa-sp-sel-inline' : ''}`}>
+          <div key={block.id} className="border-b border-gray-200">
+            <div className="flex items-baseline justify-between px-2 py-1 bg-gray-50 gap-2">
+              <span className={cn(
+                'font-mono text-[11px] font-medium overflow-hidden text-ellipsis whitespace-nowrap min-w-0',
+                block.isInline ? 'text-gray-400 italic' : 'text-purple-800'
+              )}>
                 {block.selector}
               </span>
-              {block.source && <span className="qa-sp-src">{block.source}</span>}
+              {block.source && <span className="text-[10px] text-gray-400 flex-shrink-0 overflow-hidden text-ellipsis whitespace-nowrap max-w-[140px]">{block.source}</span>}
             </div>
 
-            <div className="qa-sp-body">
+            <div className="py-0.5 px-2 pl-4">
               {block.properties.map((p, i) => (
-                <div key={`${p.property}-${i}`} className={`qa-sp-prop ${p.overridden ? 'qa-sp-over' : ''}`}>
-                  <span className={`qa-sp-pn ${p.property.startsWith('--') ? 'qa-sp-pn-tok' : ''}`}>
+                <div key={`${p.property}-${i}`} className={cn(
+                  'flex items-baseline py-px leading-relaxed font-mono text-[11px]',
+                  p.overridden && 'opacity-45 [&_.prop-name]:line-through [&_.prop-value]:line-through'
+                )}>
+                  <span className={cn(
+                    'prop-name flex-shrink-0 whitespace-nowrap',
+                    p.property.startsWith('--') ? 'text-violet-600' : 'text-blue-800'
+                  )}>
                     {p.property}
                   </span>
-                  <span className="qa-sp-c">:</span>
+                  <span className="text-gray-400 mr-0.5 flex-shrink-0">:</span>
                   <PropertyValueInput
                     property={p.property}
                     value={p.value}
                     onChange={(val) => handleValueChange(block.id, p.property, val)}
                     overridden={p.overridden}
                   />
-                  {p.priority === 'important' && <span className="qa-sp-imp">!important</span>}
-                  <span className="qa-sp-sc">;</span>
+                  {p.priority === 'important' && <span className="text-red-600 text-[10px] ml-0.5 flex-shrink-0">!important</span>}
+                  <span className="text-gray-400 flex-shrink-0">;</span>
                 </div>
               ))}
 
               {/* Add property */}
               {addingToBlock === block.id ? (
-                <div className="qa-sp-add">
+                <div className="flex items-baseline py-px font-mono text-[11px]">
                   <PropertyNameInput
                     value={newPropName}
                     onChange={setNewPropName}
@@ -442,7 +452,7 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
                     }}
                     onEscape={() => setAddingToBlock(null)}
                   />
-                  <span className="qa-sp-c">:</span>
+                  <span className="text-gray-400 mr-0.5">:</span>
                   <PropertyValueAutocomplete
                     ref={valueInputRef}
                     property={newPropName}
@@ -451,11 +461,11 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
                     onSubmit={handleAddProperty}
                     onEscape={() => setAddingToBlock(null)}
                   />
-                  <span className="qa-sp-sc">;</span>
+                  <span className="text-gray-400">;</span>
                 </div>
               ) : (
                 <button
-                  className="qa-sp-add-btn"
+                  className="inline-block font-mono text-[10px] text-gray-500 bg-transparent border-none cursor-pointer px-1 py-0.5 mt-px rounded hover:text-blue-500 hover:bg-blue-50"
                   onClick={() => { setAddingToBlock(block.id); setNewPropName(''); setNewPropValue(''); }}
                 >
                   + property

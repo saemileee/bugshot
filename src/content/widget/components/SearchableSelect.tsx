@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { cn } from '@/shared/utils/cn';
+import { ChevronDown } from 'lucide-react';
 
 export interface SelectOption {
   value: string;
@@ -52,7 +54,7 @@ export function SearchableSelect({
   // Scroll highlighted item into view
   useEffect(() => {
     if (highlightedIndex >= 0 && dropdownRef.current) {
-      const items = dropdownRef.current.querySelectorAll('.qa-searchable-select-option');
+      const items = dropdownRef.current.querySelectorAll('[data-option]');
       const item = items[highlightedIndex];
       if (item) {
         item.scrollIntoView({ block: 'nearest' });
@@ -104,11 +106,11 @@ export function SearchableSelect({
   }, [filteredOptions, totalItems, highlightedIndex, handleSelect, handleClose]);
 
   return (
-    <div className="qa-searchable-select">
+    <div className="relative w-full">
       {/* Backdrop for closing dropdown */}
       {isOpen && (
         <div
-          className="qa-searchable-select-backdrop"
+          className="fixed inset-0 z-[99]"
           onClick={handleClose}
         />
       )}
@@ -117,28 +119,26 @@ export function SearchableSelect({
       {!isOpen ? (
         <button
           type="button"
-          className="qa-searchable-select-trigger"
+          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 bg-white border border-gray-200 rounded-md text-xs text-slate-800 cursor-pointer text-left transition-colors hover:border-gray-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
           onClick={handleOpen}
         >
           {selectedOption ? (
-            <div className="qa-searchable-select-value">
+            <div className="flex items-center gap-2 overflow-hidden">
               {selectedOption.avatarUrl && (
-                <img src={selectedOption.avatarUrl} alt="" className="qa-searchable-select-avatar" />
+                <img src={selectedOption.avatarUrl} alt="" className="w-5 h-5 rounded-full flex-shrink-0" />
               )}
               <span>{selectedOption.label}</span>
             </div>
           ) : (
-            <span className="qa-searchable-select-placeholder">{emptyLabel}</span>
+            <span className="text-gray-400">{emptyLabel}</span>
           )}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          <ChevronDown className="w-3 h-3 text-gray-400" />
         </button>
       ) : (
         <input
           ref={inputRef}
           type="text"
-          className="qa-searchable-select-input"
+          className="w-full px-2.5 py-1.5 bg-white border border-blue-500 rounded-md text-xs text-slate-800 outline-none ring-2 ring-blue-500/10"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -149,40 +149,55 @@ export function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="qa-searchable-select-dropdown" ref={dropdownRef}>
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 right-0 mt-1 max-h-[200px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-[100]"
+        >
           {loading ? (
-            <div className="qa-searchable-select-loading">Loading...</div>
+            <div className="p-3 text-xs text-gray-500 text-center">Loading...</div>
           ) : (
             <>
               {/* Empty option */}
               <button
                 type="button"
-                className={`qa-searchable-select-option ${!value ? 'selected' : ''} ${highlightedIndex === 0 ? 'highlighted' : ''}`}
+                data-option
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 bg-transparent border-none text-xs text-slate-800 text-left cursor-pointer transition-colors',
+                  !value && 'bg-blue-50 text-blue-500',
+                  highlightedIndex === 0 && 'bg-gray-100',
+                  highlightedIndex === 0 && !value && 'bg-blue-100'
+                )}
                 onClick={() => handleSelect('')}
                 onMouseEnter={() => setHighlightedIndex(0)}
               >
-                <span className="qa-searchable-select-option-label">{emptyLabel}</span>
+                <span className="font-medium">{emptyLabel}</span>
               </button>
 
               {filteredOptions.length === 0 && search && (
-                <div className="qa-searchable-select-empty">No results</div>
+                <div className="p-3 text-xs text-gray-500 text-center">No results</div>
               )}
 
               {filteredOptions.map((option, index) => (
                 <button
                   key={option.value}
                   type="button"
-                  className={`qa-searchable-select-option ${option.value === value ? 'selected' : ''} ${highlightedIndex === index + 1 ? 'highlighted' : ''}`}
+                  data-option
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 bg-transparent border-none text-xs text-slate-800 text-left cursor-pointer transition-colors',
+                    option.value === value && 'bg-blue-50 text-blue-500',
+                    highlightedIndex === index + 1 && 'bg-gray-100',
+                    highlightedIndex === index + 1 && option.value === value && 'bg-blue-100'
+                  )}
                   onClick={() => handleSelect(option.value)}
                   onMouseEnter={() => setHighlightedIndex(index + 1)}
                 >
                   {option.avatarUrl && (
-                    <img src={option.avatarUrl} alt="" className="qa-searchable-select-avatar" />
+                    <img src={option.avatarUrl} alt="" className="w-5 h-5 rounded-full flex-shrink-0" />
                   )}
-                  <div className="qa-searchable-select-option-content">
-                    <span className="qa-searchable-select-option-label">{option.label}</span>
+                  <div className="flex flex-col gap-px overflow-hidden">
+                    <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{option.label}</span>
                     {option.subLabel && (
-                      <span className="qa-searchable-select-option-sublabel">{option.subLabel}</span>
+                      <span className="text-[11px] text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis">{option.subLabel}</span>
                     )}
                   </div>
                 </button>

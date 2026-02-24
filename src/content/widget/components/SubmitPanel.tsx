@@ -6,6 +6,12 @@ import type { ScreenshotData } from '../WidgetRoot';
 import type { SendMessageFn } from '../hooks/useSWMessaging';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { SearchableSelect, type SelectOption } from './SearchableSelect';
+import { cn } from '@/shared/utils/cn';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card, CardContent } from './ui/card';
+import { Eye, Send, ChevronDown, ArrowLeft, Copy, Check, CheckCircle, XCircle } from 'lucide-react';
 
 interface JiraUser { accountId: string; displayName: string; avatarUrl?: string }
 interface JiraPriority { id: string; name: string; iconUrl?: string }
@@ -365,255 +371,250 @@ export function SubmitPanel({
 
   return (
     <div>
-      <div className="qa-page-title" style={{ paddingBottom: 0 }}>
-        <span className="qa-page-title-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
+      <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800">
+        <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 text-slate-500">
+          <Eye className="w-3.5 h-3.5" />
         </span>
         Preview & Submit
       </div>
-      <div className="flex items-center justify-end gap-1" style={{ padding: '8px 16px 12px' }}>
-        <button
-          className={`qa-btn ${copied ? 'qa-btn-success' : 'qa-btn-ghost'}`}
-          onClick={handleCopy}
-        >
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+      <div className="flex items-center justify-end gap-1 px-4 pb-3">
+        <Button variant={copied ? 'primary' : 'ghost'} size="sm" onClick={handleCopy}>
+          {copied ? <><Check className="w-3 h-3" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy</>}
+        </Button>
         {onBack && (
-          <button className="qa-btn qa-btn-ghost" onClick={onBack}>
-            Back
-          </button>
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowLeft className="w-3 h-3" /> Back
+          </Button>
         )}
       </div>
 
-      <div style={{ padding: '0 16px' }}>
+      <div className="px-4 space-y-3">
         {/* Summary (editable) */}
-        <div className="qa-preview-card">
-          <div className="qa-preview-label">Summary</div>
-          <input
-            className="qa-preview-summary-input"
-            type="text"
-            value={editSummary}
-            onChange={(e) => setEditSummary(e.target.value)}
-            spellCheck={false}
-          />
-        </div>
+        <Card>
+          <CardContent className="p-3">
+            <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">Summary</Label>
+            <input
+              className="w-full px-2 py-1.5 text-[13px] font-semibold text-slate-800 border border-gray-200 rounded-md outline-none bg-white transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              type="text"
+              value={editSummary}
+              onChange={(e) => setEditSummary(e.target.value)}
+              spellCheck={false}
+            />
+          </CardContent>
+        </Card>
 
         {/* CSS Changes table */}
         {changes.length > 0 && (
-          <div className="qa-preview-card">
-            <div className="qa-preview-label">CSS Changes ({changes.length})</div>
-            {changes.map((change) => {
-              const meta = change.properties.filter((p) => SPECIAL_PROPS.has(p.property));
-              const styles = change.properties.filter((p) => !SPECIAL_PROPS.has(p.property));
+          <Card>
+            <CardContent className="p-3">
+              <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">CSS Changes ({changes.length})</Label>
+              {changes.map((change) => {
+                const meta = change.properties.filter((p) => SPECIAL_PROPS.has(p.property));
+                const styles = change.properties.filter((p) => !SPECIAL_PROPS.has(p.property));
 
-              return (
-                <div key={change.id} style={{ marginBottom: 12 }}>
-                  <code className="qa-preview-selector">{change.selector}</code>
+                return (
+                  <div key={change.id} className="mb-3 last:mb-0">
+                    <code className="block bg-gray-100 text-xs font-mono px-2 py-1 rounded mb-1.5 break-all">{change.selector}</code>
 
-                  {(change.screenshotBefore || change.screenshotAfter) && (
-                    <div className="qa-change-ss" style={{ margin: '6px 0', padding: '6px', background: '#f9fafb', borderRadius: 6 }}>
-                      {change.screenshotBefore && (
-                        <div className="qa-change-ss-col">
-                          <span className="qa-change-ss-label">As-Is</span>
-                          <img className="qa-change-ss-img" src={change.screenshotBefore} alt="Before" />
-                        </div>
-                      )}
-                      {change.screenshotAfter && (
-                        <div className="qa-change-ss-col">
-                          <span className="qa-change-ss-label">To-Be</span>
-                          <img className="qa-change-ss-img" src={change.screenshotAfter} alt="After" />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {(change.screenshotBefore || change.screenshotAfter) && (
+                      <div className="flex gap-2 my-1.5 p-1.5 bg-gray-50 rounded-md">
+                        {change.screenshotBefore && (
+                          <div className="flex-1 min-w-0">
+                            <span className="block text-xs font-semibold text-gray-500 mb-1">As-Is</span>
+                            <img className="w-full rounded border border-gray-200" src={change.screenshotBefore} alt="Before" />
+                          </div>
+                        )}
+                        {change.screenshotAfter && (
+                          <div className="flex-1 min-w-0">
+                            <span className="block text-xs font-semibold text-gray-500 mb-1">To-Be</span>
+                            <img className="w-full rounded border border-gray-200" src={change.screenshotAfter} alt="After" />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                  {change.description && (
-                    <div className="qa-change-desc" style={{ borderRadius: 4, marginBottom: 6 }}>
-                      {change.description}
-                    </div>
-                  )}
+                    {change.description && (
+                      <div className="px-3 py-2 text-xs text-slate-700 bg-amber-50 border-b border-amber-100 leading-relaxed whitespace-pre-wrap rounded mb-1.5">
+                        {change.description}
+                      </div>
+                    )}
 
-                  {meta.length > 0 && meta.map((m, i) => (
-                    <div key={i} className="qa-preview-meta">
-                      <span style={{ fontWeight: 600 }}>{m.property}:</span>{' '}
-                      <span className="as-is">{m.asIs}</span>
-                      <span className="text-gray-400 mx-1">&rarr;</span>
-                      <span className="to-be">{m.toBe}</span>
-                    </div>
-                  ))}
+                    {meta.length > 0 && meta.map((m, i) => (
+                      <div key={i} className="text-xs py-0.5">
+                        <span className="font-semibold">{m.property}:</span>{' '}
+                        <span className="text-red-500 line-through">{m.asIs}</span>
+                        <span className="text-gray-400 mx-1">&rarr;</span>
+                        <span className="text-green-600 font-medium">{m.toBe}</span>
+                      </div>
+                    ))}
 
-                  {styles.length > 0 && (
-                    <table className="qa-preview-table">
-                      <thead>
-                        <tr>
-                          <th>Property</th>
-                          <th>As-Is</th>
-                          <th>To-Be</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {styles.map((s, i) => (
-                          <tr key={i}>
-                            <td>
-                              <code>{s.property}</code>
-                              {s.isDesignToken && <span className="qa-token-badge ml-1">token</span>}
-                            </td>
-                            <td className="as-is">{s.asIs}</td>
-                            <td className="to-be">{s.toBe}</td>
+                    {styles.length > 0 && (
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="text-left text-gray-500 font-medium py-1 px-2 border-b border-gray-200 bg-gray-50">Property</th>
+                            <th className="text-left text-gray-500 font-medium py-1 px-2 border-b border-gray-200 bg-gray-50">As-Is</th>
+                            <th className="text-left text-gray-500 font-medium py-1 px-2 border-b border-gray-200 bg-gray-50">To-Be</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                        </thead>
+                        <tbody>
+                          {styles.map((s, i) => (
+                            <tr key={i}>
+                              <td className="py-1 px-2 border-b border-gray-100 break-all">
+                                <code className="bg-gray-100 px-1 py-0.5 rounded font-mono text-xs">{s.property}</code>
+                                {s.isDesignToken && <span className="text-purple-500 bg-purple-50 border border-purple-200 px-1 py-0.5 rounded text-xs ml-1">token</span>}
+                              </td>
+                              <td className="py-1 px-2 border-b border-gray-100 text-red-500 line-through break-all">{s.asIs}</td>
+                              <td className="py-1 px-2 border-b border-gray-100 text-green-600 font-medium break-all">{s.toBe}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         )}
 
         {/* Screenshots */}
         {screenshots.length > 0 && (
-          <div className="qa-preview-card">
-            <div className="qa-preview-label">Screenshots ({screenshots.length})</div>
-            <div className="qa-preview-thumbs">
-              {screenshots.map((ss, i) => (
-                <img
-                  key={i}
-                  src={ss.annotated || ss.original}
-                  alt={`Screenshot ${i + 1}`}
-                  className="qa-preview-thumb"
-                />
-              ))}
-            </div>
-          </div>
+          <Card>
+            <CardContent className="p-3">
+              <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">Screenshots ({screenshots.length})</Label>
+              <div className="flex gap-2 flex-wrap">
+                {screenshots.map((ss, i) => (
+                  <img
+                    key={i}
+                    src={ss.annotated || ss.original}
+                    alt={`Screenshot ${i + 1}`}
+                    className="w-20 h-14 object-cover rounded border border-gray-200"
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Video Recording */}
         {videoRecordingId && videoDataUrl && (
-          <div className="qa-preview-card">
-            <div className="qa-preview-label">Screen Recording</div>
-            <video
-              src={videoDataUrl}
-              controls
-              playsInline
-              style={{ width: '100%', borderRadius: 6, marginTop: 4 }}
-            />
-          </div>
+          <Card>
+            <CardContent className="p-3">
+              <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">Screen Recording</Label>
+              <video
+                src={videoDataUrl}
+                controls
+                playsInline
+                className="w-full rounded-md mt-1"
+              />
+            </CardContent>
+          </Card>
         )}
 
         {/* Notes */}
         {description.trim() && (
-          <div className="qa-preview-card">
-            <div className="qa-preview-label">Notes</div>
-            <div className="qa-preview-value" style={{ whiteSpace: 'pre-wrap' }}>{description}</div>
-          </div>
+          <Card>
+            <CardContent className="p-3">
+              <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">Notes</Label>
+              <div className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{description}</div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Context */}
-        <div className="qa-preview-card">
-          <div className="qa-preview-label">Context</div>
-          <div className="qa-preview-value">
-            <div>Page: <a href={window.location.href} style={{ color: '#3b82f6' }}>{window.location.pathname}</a></div>
-            <div>Captured: {new Date().toLocaleString()}</div>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-3">
+            <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1.5">Context</Label>
+            <div className="text-xs text-gray-800 leading-relaxed">
+              <div>Page: <a href={window.location.href} className="text-blue-500">{window.location.pathname}</a></div>
+              <div>Captured: {new Date().toLocaleString()}</div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Integration Options */}
         {enabledIntegrations.includes('jira') && (
-          <div className="qa-preview-card">
-            <button
-              className="qa-integration-options-header"
-              onClick={() => setJiraOptionsOpen(!jiraOptionsOpen)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                color: 'inherit',
-              }}
-            >
-              <div className="qa-preview-label" style={{ marginBottom: 0 }}>
-                Jira Options
-                {(selectedAssignee || selectedPriority || epicKey) && (
-                  <span style={{ marginLeft: 6, fontSize: 11, color: '#3b82f6' }}>
-                    ({[selectedAssignee && 'Assignee', selectedPriority && 'Priority', epicKey && 'Epic'].filter(Boolean).join(', ')})
-                  </span>
-                )}
-              </div>
-              <svg
-                className={`qa-section-chevron ${jiraOptionsOpen ? 'open' : ''}`}
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
+          <Card>
+            <CardContent className="p-3">
+              <button
+                onClick={() => setJiraOptionsOpen(!jiraOptionsOpen)}
+                className="w-full flex items-center justify-between bg-transparent border-none p-0 cursor-pointer text-inherit"
               >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+                <div className="flex items-center gap-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-0">
+                    Jira Options
+                  </Label>
+                  {(selectedAssignee || selectedPriority || epicKey) && (
+                    <span className="text-[11px] text-blue-500">
+                      ({[selectedAssignee && 'Assignee', selectedPriority && 'Priority', epicKey && 'Epic'].filter(Boolean).join(', ')})
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={cn('w-3 h-3 text-gray-400 transition-transform', jiraOptionsOpen && 'rotate-180')} />
+              </button>
 
-            {jiraOptionsOpen && (
-              <div style={{ marginTop: 12 }}>
-                <div className="qa-settings-field" style={{ marginBottom: 8 }}>
-                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Assignee</label>
-                  <SearchableSelect
-                    options={assigneeOptions}
-                    value={selectedAssignee}
-                    onChange={setSelectedAssignee}
-                    placeholder="Search assignee..."
-                    emptyLabel="Unassigned"
-                    loading={loadingJiraOptions}
-                  />
+              {jiraOptionsOpen && (
+                <div className="mt-3 space-y-2.5">
+                  <div>
+                    <Label className="text-[11px]">Assignee</Label>
+                    <SearchableSelect
+                      options={assigneeOptions}
+                      value={selectedAssignee}
+                      onChange={setSelectedAssignee}
+                      placeholder="Search assignee..."
+                      emptyLabel="Unassigned"
+                      loading={loadingJiraOptions}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Priority</Label>
+                    <SearchableSelect
+                      options={priorityOptions}
+                      value={selectedPriority}
+                      onChange={setSelectedPriority}
+                      placeholder="Search priority..."
+                      emptyLabel="Default"
+                      loading={loadingJiraOptions}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Epic Key</Label>
+                    <Input
+                      type="text"
+                      value={epicKey}
+                      onChange={(e) => setEpicKey(e.target.value.toUpperCase())}
+                      placeholder="e.g. PROJ-123"
+                    />
+                  </div>
                 </div>
-                <div className="qa-settings-field" style={{ marginBottom: 8 }}>
-                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Priority</label>
-                  <SearchableSelect
-                    options={priorityOptions}
-                    value={selectedPriority}
-                    onChange={setSelectedPriority}
-                    placeholder="Search priority..."
-                    emptyLabel="Default"
-                    loading={loadingJiraOptions}
-                  />
-                </div>
-                <div className="qa-settings-field">
-                  <label className="qa-settings-label" style={{ fontSize: 11 }}>Epic Key</label>
-                  <input
-                    className="qa-settings-input"
-                    type="text"
-                    value={epicKey}
-                    onChange={(e) => setEpicKey(e.target.value.toUpperCase())}
-                    placeholder="e.g. PROJ-123"
-                    spellCheck={false}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Multi-integration results */}
         {results && (
-          <div className="qa-integration-results">
+          <div className="flex flex-col gap-1.5 mb-3">
             {results.map((r) => (
-              <div key={r.integrationId} className={`qa-integration-result ${r.success ? 'qa-integration-result-ok' : 'qa-integration-result-fail'}`}>
-                <span className="qa-integration-result-icon">{r.success ? '✓' : '✗'}</span>
-                <div className="qa-integration-result-body">
+              <div
+                key={r.integrationId}
+                className={cn(
+                  'flex items-center gap-2 px-2.5 py-2 rounded-md text-xs',
+                  r.success ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                )}
+              >
+                <span className="flex-shrink-0 font-bold">
+                  {r.success ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                </span>
+                <div className="flex flex-col gap-0.5 min-w-0">
                   <span>
                     <strong>{INTEGRATION_LABELS[r.integrationId]}</strong>
                     {r.issueKey && `: ${r.issueKey}`}
                     {!r.success && r.error && `: ${r.error}`}
                   </span>
                   {r.url && r.success && (
-                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="qa-integration-result-link">
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-sky-700 break-all hover:underline">
                       {r.url}
                     </a>
                   )}
@@ -625,12 +626,15 @@ export function SubmitPanel({
 
         {/* Legacy Jira result */}
         {legacyResult && (
-          <div className={`qa-status ${legacyResult.success ? 'qa-status-success' : 'qa-status-error'}`} style={{ marginBottom: 12 }}>
+          <div className={cn(
+            'flex items-start gap-2 p-2.5 rounded-md text-xs leading-relaxed mb-3',
+            legacyResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          )}>
             {legacyResult.success ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="flex flex-col gap-1">
                 <span>Created <strong>{legacyResult.issueKey}</strong></span>
                 {legacyIssueUrl && (
-                  <a href={legacyIssueUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontSize: 12, wordBreak: 'break-all' }}>
+                  <a href={legacyIssueUrl} target="_blank" rel="noopener noreferrer" className="text-sky-700 text-xs break-all hover:underline">
                     {legacyIssueUrl}
                   </a>
                 )}
@@ -640,14 +644,15 @@ export function SubmitPanel({
             )}
           </div>
         )}
-
       </div>
 
       {/* Fixed Submit button at bottom */}
       {!allSuccess && !legacyResult?.success && (
-        <div className="qa-submit-fixed-footer">
-          <button
-            className="qa-btn qa-btn-primary qa-btn-block qa-btn-lg"
+        <div className="sticky bottom-0 left-0 right-0 px-4 py-3 bg-gradient-to-t from-white via-white to-transparent z-10">
+          <Button
+            variant="primary"
+            size="lg"
+            className="w-full min-h-[48px]"
             onClick={handleSubmit}
             disabled={isSubmitting || !editSummary.trim()}
           >
@@ -655,14 +660,11 @@ export function SubmitPanel({
               'Submitting...'
             ) : (
               <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2L11 13" />
-                  <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                </svg>
+                <Send className="w-4 h-4" />
                 {submitLabel}
               </>
             )}
-          </button>
+          </Button>
         </div>
       )}
     </div>
