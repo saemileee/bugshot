@@ -6,6 +6,7 @@ import { InlineScreenshotEditor } from "./components/InlineScreenshotEditor";
 import { ManualDescription } from "./components/ManualDescription";
 import { SubmitPanel } from "./components/SubmitPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { RegionSelector } from "./components/RegionSelector";
 import { Button } from "./components/ui/button";
 import { useSWMessaging } from "./hooks/useSWMessaging";
 import { useElementPicker } from "./hooks/useElementPicker";
@@ -31,6 +32,7 @@ export function WidgetRoot() {
   const [activeTab, setActiveTab] = useState<ToolbarTab>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isSelectingRegion, setIsSelectingRegion] = useState(false);
 
   // ── Data state ──
   const [screenshots, setScreenshots] = useState<ScreenshotData[]>([]);
@@ -99,7 +101,7 @@ export function WidgetRoot() {
   const { port, sendMessage } = useSWMessaging(handlePortMessage);
   const picker = useElementPicker();
   const tracking = useContentCSSTracking();
-  const { captureFullPage, captureElement } = useScreenshot(port);
+  const { captureFullPage, captureElement, captureRegion } = useScreenshot(port);
 
   const beforeScreenshotRef = useRef<string | null>(null);
 
@@ -275,6 +277,30 @@ export function WidgetRoot() {
       setIsCapturing(false);
     }
   }, [captureFullPage]);
+
+  const handleToolbarRegionScreenshot = useCallback(() => {
+    // Start region selection mode
+    setIsSelectingRegion(true);
+  }, []);
+
+  const handleRegionSelected = useCallback(async (region: { x: number; y: number; width: number; height: number }) => {
+    setIsSelectingRegion(false);
+    setIsCapturing(true);
+    try {
+      const dataUrl = await captureRegion(region);
+      const filename = `screenshot-region-${Date.now()}.png`;
+      setScreenshots((prev) => [...prev, { original: dataUrl, filename }]);
+      setActiveTab("changes");
+    } catch (err) {
+      console.error("Region screenshot failed:", err);
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [captureRegion]);
+
+  const handleRegionCancel = useCallback(() => {
+    setIsSelectingRegion(false);
+  }, []);
 
   const handleToolbarRecord = useCallback(async () => {
     setRecordError(null);
@@ -730,22 +756,33 @@ export function WidgetRoot() {
   })();
 
   return (
-    <FloatingWidget
-      activeTab={activeTab}
-      onTabChange={handleTabChange}
-      isRecording={isRecording}
-      isPicking={picker.isPicking}
-      isCapturing={isCapturing}
-      isPreviewMode={showPreview}
-      isEditing={isEditing}
-      hasContent={hasContent}
-      hasRecording={!!recordingId}
-      onPickElement={handleStartPicking}
-      onScreenshot={handleToolbarScreenshot}
-      onRecordToggle={handleToolbarRecord}
-      footer={footerContent}
-    >
-      {panelContent}
-    </FloatingWidget>
+    <>
+      <FloatingWidget
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        isRecording={isRecording}
+        isPicking={picker.isPicking}
+        isCapturing={isCapturing}
+        isPreviewMode={showPreview}
+        isEditing={isEditing}
+        hasContent={hasContent}
+        hasRecording={!!recordingId}
+        onPickElement={handleStartPicking}
+        onScreenshot={handleToolbarScreenshot}
+        onRegionScreenshot={handleToolbarRegionScreenshot}
+        onRecordToggle={handleToolbarRecord}
+        footer={footerContent}
+      >
+        {panelContent}
+      </FloatingWidget>
+
+      {/* Region selection overlay */}
+      {isSelectingRegion && (
+        <RegionSelector
+          onRegionSelected={handleRegionSelected}
+          onCancel={handleRegionCancel}
+        />
+      )}
+    </>
   );
 }

@@ -16,6 +16,7 @@ import {
   X,
   Pencil,
   FileText,
+  Crop,
 } from "lucide-react";
 
 export type ToolbarTab = "changes" | "settings" | null;
@@ -32,6 +33,7 @@ interface FloatingWidgetProps {
   hasRecording?: boolean;
   onPickElement: () => void;
   onScreenshot: () => void;
+  onRegionScreenshot: () => void;
   onRecordToggle: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -53,6 +55,7 @@ export function FloatingWidget({
   hasRecording,
   onPickElement,
   onScreenshot,
+  onRegionScreenshot,
   onRecordToggle,
   children,
   footer,
@@ -363,7 +366,7 @@ export function FloatingWidget({
           )}
         </button>
 
-        {/* Screenshot */}
+        {/* Screenshot - Full Page */}
         <button
           data-bar-btn
           className={cn(
@@ -381,10 +384,34 @@ export function FloatingWidget({
               ? "Finish editing to take screenshots"
               : isPreviewMode
               ? "Exit preview to take screenshots"
-              : "Take Screenshot"
+              : "Full Page Screenshot"
           }
         >
           <Camera className="w-4 h-4" />
+        </button>
+
+        {/* Screenshot - Region */}
+        <button
+          data-bar-btn
+          className={cn(
+            "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
+            "hover:bg-slate-100 hover:text-slate-600",
+            isCapturing && "bg-slate-100 text-slate-800",
+            (isPreviewMode || isPicking || isEditing || isRecording) && "opacity-40 cursor-not-allowed"
+          )}
+          onClick={(isPreviewMode || isPicking || isEditing || isRecording) ? flashPanel : onRegionScreenshot}
+          disabled={isCapturing}
+          title={
+            isRecording
+              ? "Stop recording to take screenshots"
+              : isPicking || isEditing
+              ? "Finish editing to take screenshots"
+              : isPreviewMode
+              ? "Exit preview to take screenshots"
+              : "Region Screenshot"
+          }
+        >
+          <Crop className="w-4 h-4" />
         </button>
 
         {/* Record */}

@@ -130,5 +130,32 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
       });
   }, [captureRaw]);
 
-  return { captureFullPage, captureElement };
+  /** Capture a specific region of the page. */
+  const captureRegion = useCallback((region: { x: number; y: number; width: number; height: number }): Promise<string> => {
+    const dpr = window.devicePixelRatio || 1;
+
+    return captureRaw().then((dataUrl) => {
+      return new Promise<string>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          // Source coordinates (in the captured image, which is at dpr scale)
+          const sx = Math.max(0, Math.round(region.x * dpr));
+          const sy = Math.max(0, Math.round(region.y * dpr));
+          const sw = Math.min(img.width - sx, Math.round(region.width * dpr));
+          const sh = Math.min(img.height - sy, Math.round(region.height * dpr));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = sw;
+          canvas.height = sh;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(dataUrl); // fallback to full page
+        img.src = dataUrl;
+      });
+    });
+  }, [captureRaw]);
+
+  return { captureFullPage, captureElement, captureRegion };
 }
