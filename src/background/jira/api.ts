@@ -275,7 +275,6 @@ export async function fetchEpics(projectKey: string): Promise<JiraEpic[]> {
     const issueTypes = await fetchIssueTypes(projectKey);
     const epicType = issueTypes.find(
       (t) => t.name.toLowerCase() === 'epic' ||
-             t.name === '에픽' ||
              t.name.toLowerCase().includes('epic')
     );
 
@@ -377,7 +376,6 @@ export async function getEpicLinkFieldId(projectKey: string): Promise<string | n
           // Epic Link field has specific schema
           if (
             def.name === 'Epic Link' ||
-            def.name === '에픽 링크' ||
             (def.schema as Record<string, unknown>)?.custom === 'com.pyxis.greenhopper.jira:gh-epic-link'
           ) {
             return fieldId;

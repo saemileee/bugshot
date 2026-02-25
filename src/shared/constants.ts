@@ -10,7 +10,7 @@ export const STORAGE_KEYS = {
   INTEGRATIONS: 'integrations',
   // Widget visibility toggle
   WIDGET_VISIBLE: 'widgetVisible',
-  // Title prefix (말머리)
+  // Title prefix
   TITLE_PREFIX: 'titlePrefix',
   // Jira submit options (assignee, priority)
   JIRA_SUBMIT_OPTIONS: 'jiraSubmitOptions',

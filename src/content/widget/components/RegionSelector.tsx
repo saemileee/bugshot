@@ -126,7 +126,7 @@ export function RegionSelector({ onRegionSelected, onCancel }: RegionSelectorPro
       {/* Instructions */}
       {!startPos && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg text-sm text-slate-700 pointer-events-none">
-          드래그하여 영역을 선택하세요 • ESC로 취소
+          Drag to select region • Press ESC to cancel
         </div>
       )}
     </div>

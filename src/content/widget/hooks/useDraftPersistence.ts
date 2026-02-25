@@ -145,7 +145,7 @@ export function useDraftPersistence({
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabId]); // onRestore는 dependency에서 제거 (무한 루프 방지)
+  }, [tabId]); // onRestore removed from dependencies to prevent infinite loop
 
   // ── Auto-save draft when state changes (debounced) ──
   useEffect(() => {
