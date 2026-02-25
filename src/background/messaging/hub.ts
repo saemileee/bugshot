@@ -32,6 +32,16 @@ import {
 // Port registry keyed by tabId
 const contentPorts = new Map<number, chrome.runtime.Port>();
 
+// CDP session cache to reduce attach/detach frequency
+interface CDPSession {
+  tabId: number;
+  attached: boolean;
+  lastUsed: number;
+  detachTimer?: number;
+}
+const cdpSessions = new Map<number, CDPSession>();
+const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
+
 // Guard to prevent duplicate listener registration
 let hubInitialized = false;
 
@@ -676,13 +686,48 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
   console.log('[CDP] Original selector:', selector);
   console.log('[CDP] Escaped selector:', escapedSelector);
 
-  // Attach debugger
-  try {
-    await chrome.debugger.attach(target, '1.3');
-  } catch (attachError) {
-    console.error('[CDP] Failed to attach debugger:', attachError);
-    throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
+  // Check if we have an active session for this tab
+  let session = cdpSessions.get(tabId);
+
+  // Attach debugger (or reuse existing session)
+  if (!session || !session.attached) {
+    try {
+      await chrome.debugger.attach(target, '1.3');
+      console.log('[CDP] Debugger attached for tab', tabId);
+
+      session = {
+        tabId,
+        attached: true,
+        lastUsed: Date.now(),
+      };
+      cdpSessions.set(tabId, session);
+    } catch (attachError) {
+      console.error('[CDP] Failed to attach debugger:', attachError);
+      throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
+    }
+  } else {
+    console.log('[CDP] Reusing existing debugger session for tab', tabId);
   }
+
+  // Update last used time and reset detach timer
+  session.lastUsed = Date.now();
+  if (session.detachTimer) {
+    clearTimeout(session.detachTimer);
+  }
+
+  // Schedule auto-detach after timeout
+  session.detachTimer = setTimeout(async () => {
+    const s = cdpSessions.get(tabId);
+    if (s && s.attached) {
+      try {
+        await chrome.debugger.detach(target);
+        console.log('[CDP] Auto-detached debugger for tab', tabId);
+      } catch {
+        // Ignore detach errors
+      }
+      cdpSessions.delete(tabId);
+    }
+  }, CDP_SESSION_TIMEOUT) as unknown as number;
 
   try {
     // Enable DOM first, then CSS (DOM must be enabled before CSS operations)
@@ -773,12 +818,21 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
     }
 
     return { inlineStyles, matchedRules };
-  } finally {
-    // Always detach debugger
-    try {
-      await chrome.debugger.detach(target);
-    } catch {
-      // Ignore detach errors
+  } catch (error) {
+    // On error, mark session as invalid and detach
+    const s = cdpSessions.get(tabId);
+    if (s) {
+      s.attached = false;
+      if (s.detachTimer) {
+        clearTimeout(s.detachTimer);
+      }
+      try {
+        await chrome.debugger.detach(target);
+      } catch {
+        // Ignore detach errors
+      }
+      cdpSessions.delete(tabId);
     }
+    throw error;
   }
 }
