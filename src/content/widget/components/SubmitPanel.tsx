@@ -42,9 +42,11 @@ interface SubmitPanelProps {
   sendMessage: SendMessageFn;
   onSuccess: () => void;
   onBack?: () => void;
+  onGoToSettings?: () => void;
   videoRecordingId?: string | null;
   videoDataUrl?: string | null;
   videoMimeType?: string | null;
+  hasConnectedPlatform?: boolean;
   isPreview?: boolean;
 }
 
@@ -210,9 +212,11 @@ export function SubmitPanel({
   sendMessage,
   onSuccess,
   onBack,
+  onGoToSettings,
   videoRecordingId,
   videoDataUrl,
   videoMimeType,
+  hasConnectedPlatform = false,
   isPreview,
 }: SubmitPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -264,11 +268,8 @@ export function SubmitPanel({
     }
   }, []);
 
-  useEffect(() => {
-    chrome.runtime.sendMessage({ type: "CHECK_AUTH_STATUS" }, (r) => {
-      if (r?.siteUrl) setSiteUrl(r.siteUrl);
-    });
-    // Ask background for enabled integrations (handles legacy Jira migration)
+  // Helper function to refresh integration status
+  const refreshIntegrations = useCallback(() => {
     chrome.runtime.sendMessage({ type: "GET_ALL_INTEGRATIONS" }, (r) => {
       if (r?.integrations) {
         const enabled = (
@@ -278,6 +279,14 @@ export function SubmitPanel({
         setEnabledIntegrations(enabled.map((i) => i.id));
       }
     });
+  }, []);
+
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: "CHECK_AUTH_STATUS" }, (r) => {
+      if (r?.siteUrl) setSiteUrl(r.siteUrl);
+    });
+    // Ask background for enabled integrations (handles legacy Jira migration)
+    refreshIntegrations();
     // Load title prefix and generate summary
     chrome.storage.sync.get(STORAGE_KEYS.TITLE_PREFIX, (result) => {
       const prefix = result[STORAGE_KEYS.TITLE_PREFIX] ?? "[BugShot]";
@@ -325,7 +334,27 @@ export function SubmitPanel({
         if (opts.epicKey) setEpicKey(opts.epicKey);
       }
     });
-  }, [changes, loadJiraOptions]);
+  }, [changes, loadJiraOptions, refreshIntegrations]);
+
+  // ── Listen for storage changes (real-time integration updates) ──
+  useEffect(() => {
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName === "sync" || areaName === "local") {
+        // Refresh integrations when they change
+        if (changes[STORAGE_KEYS.INTEGRATIONS] || changes[STORAGE_KEYS.JIRA_CREDENTIALS]) {
+          refreshIntegrations();
+        }
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [refreshIntegrations]);
 
   // Save Jira options when they change
   useEffect(() => {
@@ -386,6 +415,19 @@ export function SubmitPanel({
   }, [editSummary, changes, description, screenshots.length]);
 
   const handleSubmit = async () => {
+    // Prevent submission if no platform is connected
+    if (!hasConnectedPlatform) {
+      console.warn("[SubmitPanel] Submit blocked: No connected platforms");
+      setResults([
+        {
+          integrationId: "jira",
+          success: false,
+          error: "No platforms connected. Please configure integrations in Settings.",
+        },
+      ]);
+      return;
+    }
+
     setIsSubmitting(true);
     setResults(null);
     setLegacyResult(null);
@@ -844,27 +886,59 @@ export function SubmitPanel({
 
       {/* Footer with Previous and Submit buttons */}
       {!allSuccess && !legacyResult?.success && (
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-t border-slate-100">
-          {onBack && (
-            <Button variant="ghost" onClick={onBack}>
-              <ArrowLeft className="w-3 h-3" />
-              Previous
-            </Button>
+        <div className="flex-shrink-0 border-t border-slate-100">
+          {/* Warning banner if no platform connected */}
+          {!hasConnectedPlatform && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border-b border-amber-200">
+              <svg
+                className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <div className="flex-1 text-xs text-amber-700">
+                <div className="font-medium mb-1">Cannot create issue</div>
+                <div className="mb-2">No platforms connected. Configure Jira, GitHub, or N8N to submit issues.</div>
+                {onGoToSettings && (
+                  <button
+                    onClick={onGoToSettings}
+                    className="text-amber-800 underline hover:text-amber-900 font-medium"
+                  >
+                    Open Settings →
+                  </button>
+                )}
+              </div>
+            </div>
           )}
-          <Button
-            className="flex-1"
-            onClick={handleSubmit}
-            disabled={isSubmitting || !editSummary.trim()}
-          >
-            {isSubmitting ? (
-              "Creating..."
-            ) : (
-              <>
-                {submitLabel}
-                <Send className="w-3.5 h-3.5" />
-              </>
+
+          <div className="flex items-center gap-2 px-4 py-3">
+            {onBack && (
+              <Button variant="ghost" onClick={onBack}>
+                <ArrowLeft className="w-3 h-3" />
+                Previous
+              </Button>
             )}
-          </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSubmit}
+              disabled={isSubmitting || !editSummary.trim() || !hasConnectedPlatform}
+              title={!hasConnectedPlatform ? "Connect to a platform first" : undefined}
+            >
+              {isSubmitting ? (
+                "Creating..."
+              ) : (
+                <>
+                  {submitLabel}
+                  <Send className="w-3.5 h-3.5" />
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
     </div>

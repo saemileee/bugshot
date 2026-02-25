@@ -151,7 +151,9 @@ function JiraSection({ defaultOpen }: { defaultOpen?: boolean }) {
             : {},
         });
       } else {
-        setAuthError((response.error as string) || "Connection failed");
+        const errorMsg = (response.error as string) || "Connection failed";
+        console.warn("[JiraSection] Connection failed:", errorMsg);
+        setAuthError(errorMsg);
       }
     });
   }, [siteUrl, email, apiToken, loadProjects, config]);
@@ -469,7 +471,9 @@ function GithubSection() {
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } else {
-        setError((r.error as string) || "Connection failed");
+        const errorMsg = (r.error as string) || "Connection failed";
+        console.warn("[GithubSection] Connection failed:", errorMsg);
+        setError(errorMsg);
       }
     });
   }, [token, owner, repo, labels]);
@@ -669,7 +673,9 @@ function N8nSection() {
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } else {
-        setError((r.error as string) || "Verification failed");
+        const errorMsg = (r.error as string) || "Verification failed";
+        console.warn("[N8nSection] Connection failed:", errorMsg);
+        setError(errorMsg);
       }
     });
   }, [webhookUrl]);
@@ -816,9 +822,12 @@ export function SettingsPanel() {
       </section>
 
       <section className="px-4 py-3 border-b border-slate-100">
-        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">
+        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
           Integrations
         </h3>
+        <div className="text-xs text-gray-500 mb-2.5">
+          Connect at least one platform to create issues
+        </div>
         <div className="flex flex-col gap-2">
           <JiraSection defaultOpen />
           <GithubSection />

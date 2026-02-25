@@ -17,9 +17,14 @@ export async function verifyJira(
 ): Promise<{ success: boolean; displayName?: string; error?: string }> {
   const { email, apiToken, siteUrl } = config.credentials;
   if (!email || !apiToken || !siteUrl) {
+    console.warn('[Jira] Verify failed: Missing credentials');
     return { success: false, error: 'Email, API token, and site URL are required' };
   }
-  return saveAndVerify(email, apiToken, siteUrl);
+  const result = await saveAndVerify(email, apiToken, siteUrl);
+  if (!result.success) {
+    console.warn('[Jira] Verification failed:', result.error);
+  }
+  return result;
 }
 
 export async function checkJiraStatus(): Promise<{ connected: boolean; displayName?: string }> {
@@ -41,6 +46,7 @@ export async function submitToJira(
 ): Promise<IntegrationResult> {
   const projectKey = config.settings.projectKey;
   if (!projectKey) {
+    console.warn('[Jira] Submit failed: No project key configured');
     return { integrationId: 'jira', success: false, error: 'No project key configured' };
   }
 
@@ -151,10 +157,12 @@ export async function submitToJira(
       url: siteUrl ? `https://${siteUrl}/browse/${issue.key}` : undefined,
     };
   } catch (error) {
+    const errorMsg = (error as Error).message;
+    console.error('[Jira] Submit failed:', errorMsg, error);
     return {
       integrationId: 'jira',
       success: false,
-      error: (error as Error).message,
+      error: errorMsg,
     };
   }
 }

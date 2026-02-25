@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { FloatingWidget, type ToolbarTab } from "./components/FloatingWidget";
 import { ChangesSummary } from "./components/ChangesSummary";
 import { StyleEditor } from "./components/StyleEditor";
-import { ScreenshotCapture } from "./components/ScreenshotCapture";
+import { InlineScreenshotEditor } from "./components/InlineScreenshotEditor";
 import { ManualDescription } from "./components/ManualDescription";
 import { SubmitPanel } from "./components/SubmitPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -34,7 +34,6 @@ export function WidgetRoot() {
 
   // ── Data state ──
   const [screenshots, setScreenshots] = useState<ScreenshotData[]>([]);
-  const [annotatingIndex, setAnnotatingIndex] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [changes, setChanges] = useState<CSSChange[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -51,6 +50,8 @@ export function WidgetRoot() {
   );
   const [editNote, setEditNote] = useState("");
   const [recordError, setRecordError] = useState<string | null>(null);
+  const [hasConnectedPlatform, setHasConnectedPlatform] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   // Ref to track current recording ID for cleanup
   const recordingIdRef = useRef<string | null>(null);
@@ -133,7 +134,6 @@ export function WidgetRoot() {
     }
     // Clear all React state
     setScreenshots([]);
-    setAnnotatingIndex(null);
     setDescription("");
     setChanges([]);
     setRecordingId(null);
@@ -148,6 +148,54 @@ export function WidgetRoot() {
     tracking.reset();
     picker.clearPicked();
   }, [recordingId, deleteRecordingFromDB, tracking, picker]);
+
+  // Helper function to check platform connection status
+  const checkPlatformStatus = useCallback(() => {
+    setCheckingAuth(true);
+    chrome.runtime.sendMessage({ type: "GET_ALL_INTEGRATIONS" }, (r) => {
+      if (r?.integrations) {
+        const enabled = (
+          r.integrations as Array<{ id: string; enabled: boolean }>
+        ).filter((i) => i.enabled);
+        const hasConnected = enabled.length > 0;
+        setHasConnectedPlatform(hasConnected);
+
+        if (!hasConnected) {
+          console.warn("[WidgetRoot] No connected platforms found. User must configure integrations in Settings.");
+        }
+      } else {
+        console.warn("[WidgetRoot] Failed to fetch integrations");
+        setHasConnectedPlatform(false);
+      }
+      setCheckingAuth(false);
+    });
+  }, []);
+
+  // ── Check for connected platforms on mount ──
+  useEffect(() => {
+    checkPlatformStatus();
+  }, [checkPlatformStatus]);
+
+  // ── Listen for storage changes (real-time platform connection updates) ──
+  useEffect(() => {
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      // Listen for changes in both sync and local storage
+      if (areaName === "sync" || areaName === "local") {
+        // Check if integration-related keys changed
+        if (changes["integrations"] || changes["jiraCredentials"]) {
+          checkPlatformStatus();
+        }
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [checkPlatformStatus]);
 
   // ── Cleanup on unmount (widget deactivated) ──
   useEffect(() => {
@@ -208,15 +256,11 @@ export function WidgetRoot() {
 
   // ── Toolbar actions ──
   const handleStartPicking = useCallback(() => {
-    // If annotating, cancel annotation first
-    if (annotatingIndex !== null) {
-      setAnnotatingIndex(null);
-    }
     beforeScreenshotRef.current = null;
     tracking.reset();
     picker.clearPicked();
     picker.startPicking();
-  }, [tracking, picker, annotatingIndex]);
+  }, [tracking, picker]);
 
   const handleToolbarScreenshot = useCallback(async () => {
     setIsCapturing(true);
@@ -334,7 +378,6 @@ export function WidgetRoot() {
   // ── Submit ──
   const handleSubmitSuccess = useCallback(() => {
     setScreenshots([]);
-    setAnnotatingIndex(null);
     setDescription("");
     setChanges([]);
     setRecordingId(null);
@@ -388,6 +431,48 @@ export function WidgetRoot() {
     if (showPreview) return null;
 
     if (hasContent) {
+      // Show warning if no platform is connected
+      if (!hasConnectedPlatform && !checkingAuth) {
+        return (
+          <div className="space-y-2">
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 text-amber-700 text-xs border border-amber-200">
+              <svg
+                className="w-4 h-4 flex-shrink-0 mt-0.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <div className="flex-1">
+                <div className="font-medium mb-1">No platform connected</div>
+                <div>Connect to Jira, GitHub, or N8N in Settings to create issues.</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="text-gray-500 hover:text-red-500"
+                onClick={handleClearAll}
+              >
+                Clear All
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setActiveTab("settings")}
+              >
+                Open Settings
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="flex gap-2">
           <Button
@@ -401,8 +486,9 @@ export function WidgetRoot() {
             variant="secondary"
             className="flex-1"
             onClick={() => setShowPreview(true)}
+            disabled={checkingAuth}
           >
-            Review Issue
+            {checkingAuth ? "Checking..." : "Review Issue"}
             <ArrowRight className="w-3 h-3" />
           </Button>
         </div>
@@ -438,9 +524,14 @@ export function WidgetRoot() {
             sendMessage={sendMessage}
             onSuccess={handleSubmitSuccess}
             onBack={() => setShowPreview(false)}
+            onGoToSettings={() => {
+              setShowPreview(false);
+              setActiveTab("settings");
+            }}
             videoRecordingId={recordingId}
             videoDataUrl={recordingDataUrl}
             videoMimeType={recordingMimeType}
+            hasConnectedPlatform={hasConnectedPlatform}
             isPreview
           />
         );
@@ -593,50 +684,15 @@ export function WidgetRoot() {
                       </div>
                     )}
 
-                    {/* Screenshots */}
+                    {/* Screenshots - Inline Editor */}
                     {screenshots.map((ss, i) => (
-                      <div
+                      <InlineScreenshotEditor
                         key={i}
-                        className="border border-gray-200 rounded-lg overflow-hidden"
-                      >
-                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
-                          <span className="text-xs font-medium text-gray-700">
-                            Screenshot {i + 1}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              className="inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-500 bg-transparent border-none rounded cursor-pointer transition-colors hover:bg-gray-100 hover:text-gray-700"
-                              onClick={() => setAnnotatingIndex(i)}
-                            >
-                              Annotate
-                            </button>
-                            <button
-                              className="flex items-center justify-center w-6 h-6 p-0 border-none bg-transparent cursor-pointer text-gray-400 hover:text-red-500"
-                              onClick={() => handleRemoveScreenshot(i)}
-                              title="Remove"
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                        <img
-                          className="w-full block"
-                          src={ss.annotated || ss.original}
-                          alt={`Screenshot ${i + 1}`}
-                        />
-                      </div>
+                        screenshot={ss}
+                        index={i}
+                        onUpdate={handleScreenshotUpdated}
+                        onRemove={handleRemoveScreenshot}
+                      />
                     ))}
 
                     {/* Empty state */}
@@ -650,18 +706,6 @@ export function WidgetRoot() {
                       )}
                   </div>
 
-                  {/* Annotation mode */}
-                  {annotatingIndex !== null && screenshots[annotatingIndex] && (
-                    <div className="mt-3">
-                      <ScreenshotCapture
-                        screenshots={screenshots}
-                        editingIndex={annotatingIndex}
-                        onEditingChange={setAnnotatingIndex}
-                        onUpdated={handleScreenshotUpdated}
-                        onRemove={handleRemoveScreenshot}
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
 
