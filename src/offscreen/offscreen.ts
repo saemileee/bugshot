@@ -202,8 +202,18 @@ async function startRecording() {
   };
 
   recorder.onerror = (event) => {
-    console.error('[Offscreen] MediaRecorder error:', event);
-    const errorDetail = (event as any).error?.message || 'Unknown error';
+    console.error('[Offscreen] MediaRecorder error event:', {
+      type: event.type,
+      error: (event as any).error,
+      message: (event as any).message,
+      recorderState: recorder?.state,
+      mimeType: recorder?.mimeType,
+      fullEvent: event,
+    });
+
+    const err = (event as any).error;
+    const errorDetail = err?.message || (event as any).message || err?.name || 'Unknown MediaRecorder error';
+
     chrome.runtime.sendMessage({
       type: 'recording-error',
       target: 'service-worker',
@@ -212,10 +222,10 @@ async function startRecording() {
   };
 
   recorder.onstart = () => {
-    console.log('[Offscreen] MediaRecorder started successfully');
+    console.log('[Offscreen] MediaRecorder started successfully, state:', recorder?.state);
   };
 
-  console.log('[Offscreen] Starting MediaRecorder...');
+  console.log('[Offscreen] Starting MediaRecorder, initial state:', recorder.state);
   try {
     recorder.start(1000);
   } catch (err) {
