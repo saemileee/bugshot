@@ -42,8 +42,6 @@ export async function submitToGithub(
   try {
     const body = buildGithubBody(payload);
 
-    console.log('[GitHub] Creating issue:', { owner, repo, title: payload.summary });
-
     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
       method: 'POST',
       headers: {
@@ -64,7 +62,6 @@ export async function submitToGithub(
     }
 
     const issue = await response.json();
-    console.log('[GitHub] Issue created:', issue.number);
 
     return {
       integrationId: 'github',

@@ -60,13 +60,6 @@ export async function submitToJira(
       createdAt: Date.now(),
     };
 
-    console.log('[Jira] Submission start:', {
-      changes: payload.changes.length,
-      screenshots: payload.screenshots.length,
-      screenshotFiles: payload.screenshots.map((s) => s.filename),
-      videoRecordingId: payload.videoRecordingId ?? '(none)',
-    });
-
     // Collect all filenames
     const allFilenames = payload.screenshots.map((s) => s.filename);
     let videoFilename: string | undefined;
@@ -89,14 +82,12 @@ export async function submitToJira(
       assigneeId: payload.jiraOptions?.assigneeId,
       priorityId: payload.jiraOptions?.priorityId,
     });
-    console.log('[Jira] Issue created:', issue.key);
 
     // Phase 1.5: Link to epic (if specified)
     const epicKey = payload.jiraOptions?.epicKey;
     if (epicKey) {
       try {
         await linkIssueToEpic(issue.key, epicKey, projectKey);
-        console.log('[Jira] Linked to epic:', epicKey);
       } catch (err) {
         console.warn('[Jira] Failed to link to epic:', err);
         // Don't fail the whole submission if epic linking fails
@@ -110,7 +101,6 @@ export async function submitToJira(
         const blob = dataUrlToBlob(screenshot.dataUrl);
         await addAttachment(issue.key, blob, screenshot.filename);
         uploadedCount++;
-        console.log('[Jira] Attached:', screenshot.filename);
       } catch (err) {
         console.warn('[Jira] Failed to attach', screenshot.filename, err);
       }
@@ -122,7 +112,6 @@ export async function submitToJira(
         if (videoBlob) {
           await addAttachment(issue.key, videoBlob, videoFilename);
           uploadedCount++;
-          console.log('[Jira] Video attached:', videoFilename);
         }
       } catch (err) {
         console.warn('[Jira] Video attach failed:', err);
@@ -134,7 +123,6 @@ export async function submitToJira(
       try {
         const wikiDescription = buildWikiMarkupDescription(changeSet, allFilenames);
         await updateIssueDescriptionWiki(issue.key, wikiDescription);
-        console.log('[Jira] Description updated with wiki markup');
       } catch (err) {
         console.warn('[Jira] Wiki description update failed:', err);
       }

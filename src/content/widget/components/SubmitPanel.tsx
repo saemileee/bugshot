@@ -323,20 +323,8 @@ export function SubmitPanel({
         const projectKey =
           legacyConfig?.projectKey || jiraIntegration?.settings?.projectKey;
 
-        console.log("[SubmitPanel] EPIC_CONFIG:", legacyConfig);
-        console.log("[SubmitPanel] INTEGRATIONS.jira:", jiraIntegration);
-        console.log("[SubmitPanel] Resolved projectKey:", projectKey);
-
         if (projectKey) {
-          console.log(
-            "[SubmitPanel] Loading Jira options for project:",
-            projectKey
-          );
           loadJiraOptions(projectKey);
-        } else {
-          console.log(
-            "[SubmitPanel] No projectKey configured, skipping Jira options load"
-          );
         }
       }
     );

@@ -305,7 +305,6 @@ export async function clearDraft(): Promise<void> {
 
     const draftKey = getDraftKey(response.tabId);
     await chrome.storage.local.remove(draftKey);
-    console.log('[DraftPersistence] Draft cleared from storage for tab', response.tabId);
   } catch (error) {
     console.warn('[DraftPersistence] Failed to clear draft:', error);
   }
@@ -319,7 +318,6 @@ export async function clearDraftForTab(tabId: number): Promise<void> {
   try {
     const draftKey = getDraftKey(tabId);
     await chrome.storage.local.remove(draftKey);
-    console.log('[DraftPersistence] Draft cleared for closed tab', tabId);
   } catch (error) {
     console.warn('[DraftPersistence] Failed to clear draft for tab', tabId, error);
   }

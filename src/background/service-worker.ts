@@ -12,7 +12,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_ALARM) {
     // Alarm fired - this keeps the service worker alive
     // Do nothing, just the act of firing keeps it awake
-    console.log('[BugShot] KeepAlive alarm fired');
   }
 });
 
@@ -21,7 +20,6 @@ export function startKeepAlive() {
     keepaliveActive = true;
     // Create periodic alarm every 20 seconds to keep service worker alive
     chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 / 3 }); // 20 seconds
-    console.log('[BugShot] KeepAlive started');
   }
 }
 
@@ -29,7 +27,6 @@ export function stopKeepAlive() {
   if (keepaliveActive) {
     keepaliveActive = false;
     chrome.alarms.clear(KEEPALIVE_ALARM);
-    console.log('[BugShot] KeepAlive stopped');
   }
 }
 
@@ -39,7 +36,6 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   try {
     const draftKey = `bugshot_draft_${tabId}`;
     await chrome.storage.local.remove(draftKey);
-    console.log('[BugShot] Cleaned up draft for closed tab', tabId);
   } catch (error) {
     console.warn('[BugShot] Failed to clean up draft for tab', tabId, error);
   }

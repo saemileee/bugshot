@@ -60,7 +60,6 @@ export function cleanupCDPSession(tabId: number) {
       console.warn('[CDP] Detach failed for tab', tabId, '(expected if tab closed):', error);
     });
     cdpSessions.delete(tabId);
-    console.log('[CDP] Cleaned up session for closed tab', tabId);
   }
 }
 
@@ -705,9 +704,6 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
   const target = { tabId };
   const escapedSelector = escapeCSSSelector(selector);
 
-  console.log('[CDP] Original selector:', selector);
-  console.log('[CDP] Escaped selector:', escapedSelector);
-
   // Check if we have an active session for this tab
   let session = cdpSessions.get(tabId);
 
@@ -715,7 +711,6 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
   if (!session || !session.attached) {
     try {
       await chrome.debugger.attach(target, '1.3');
-      console.log('[CDP] Debugger attached for tab', tabId);
 
       session = {
         tabId,
@@ -727,8 +722,6 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
       console.error('[CDP] Failed to attach debugger:', attachError);
       throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
     }
-  } else {
-    console.log('[CDP] Reusing existing debugger session for tab', tabId);
   }
 
   // Update last used time and reset detach timer
@@ -743,7 +736,6 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
     if (s && s.attached) {
       try {
         await chrome.debugger.detach(target);
-        console.log('[CDP] Auto-detached debugger for tab', tabId);
       } catch {
         // Ignore detach errors
       }

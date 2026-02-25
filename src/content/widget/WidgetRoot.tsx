@@ -251,7 +251,6 @@ export function WidgetRoot() {
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (response) => {
       if (response?.isRecording) {
-        console.log('[WidgetRoot] Restoring recording state');
         setIsRecording(true);
       }
     });

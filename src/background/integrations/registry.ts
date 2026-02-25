@@ -145,7 +145,6 @@ export async function submitToAll(
         target: 'offscreen',
         recordingId: payload.videoRecordingId,
       });
-      console.log('[Registry] Cleaned up recording:', payload.videoRecordingId);
     } catch (err) {
       console.warn('[Registry] Failed to clean up recording:', err);
     }

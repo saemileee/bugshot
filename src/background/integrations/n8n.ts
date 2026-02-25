@@ -45,8 +45,6 @@ export async function submitToN8n(
   }
 
   try {
-    console.log('[N8N] Sending webhook:', webhookUrl);
-
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,8 +71,6 @@ export async function submitToN8n(
       const errBody = await response.text();
       throw new Error(`Webhook ${response.status}: ${errBody}`);
     }
-
-    console.log('[N8N] Webhook sent successfully');
 
     return {
       integrationId: 'n8n',
