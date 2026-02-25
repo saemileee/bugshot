@@ -11,6 +11,7 @@ import type { ScreenshotData } from "../WidgetRoot";
 import type { SendMessageFn } from "../hooks/useSWMessaging";
 import { STORAGE_KEYS } from "@/shared/constants";
 import { SearchableSelect, type SelectOption } from "./SearchableSelect";
+import { SuccessPage } from "./SuccessPage";
 import { cn } from "@/shared/utils/cn";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -498,9 +499,7 @@ export function SubmitPanel({
         if (response.type === "INTEGRATION_RESULTS") {
           const r = (response as any).results as IntegrationResult[];
           setResults(r);
-          if (r.every((res) => res.success)) {
-            setTimeout(onSuccess, 3000);
-          }
+          // Success page will be shown automatically based on results state
         }
       } catch (err) {
         setResults([
@@ -556,6 +555,28 @@ export function SubmitPanel({
       ? `Create ${INTEGRATION_LABELS[enabledIntegrations[0]]} Issue`
       : `Create Issue in ${enabledCount} Integrations`
     : "Create Jira Issue";
+
+  // Show success page if all issues created successfully
+  if (allSuccess && results && results.length > 0) {
+    return <SuccessPage results={results} onClose={onSuccess} />;
+  }
+
+  // Show success page for legacy Jira result
+  if (legacyResult?.success && legacyResult.issueKey && legacyIssueUrl) {
+    return (
+      <SuccessPage
+        results={[
+          {
+            integrationId: 'jira',
+            success: true,
+            issueKey: legacyResult.issueKey,
+            url: legacyIssueUrl,
+          },
+        ]}
+        onClose={onSuccess}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
