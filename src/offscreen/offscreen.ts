@@ -68,10 +68,16 @@ async function startRecording() {
     stream = null;
   }
 
-  // Use getDisplayMedia — Chrome shows a tab/screen picker dialog
+  // Use getDisplayMedia — Only allow window/monitor, exclude browser tabs
   stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
+    video: {
+      displaySurface: 'monitor', // Prefer full screen, but Chrome may show window option too
+    },
     audio: false,
+    // @ts-ignore - Chrome-specific options not in standard types
+    preferCurrentTab: false, // Don't prioritize current tab
+    // @ts-ignore
+    selfBrowserSurface: 'exclude', // Exclude browser tabs from picker
   });
 
   // Handle user clicking Chrome's "Stop sharing" button
