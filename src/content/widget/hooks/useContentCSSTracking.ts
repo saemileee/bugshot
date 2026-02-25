@@ -260,6 +260,22 @@ export function useContentCSSTracking() {
   }, []);
 
   const reset = useCallback(() => {
+    // Revert element's inline styles to original state
+    const el = targetRef.current as HTMLElement | null;
+    const beforeSnapshot = beforeRef.current;
+
+    if (el && beforeSnapshot) {
+      // Clear all current inline styles
+      el.style.cssText = '';
+
+      // Restore original inline styles from snapshot
+      if (beforeSnapshot.inlineStyles) {
+        Object.entries(beforeSnapshot.inlineStyles).forEach(([prop, value]) => {
+          el.style.setProperty(prop, value);
+        });
+      }
+    }
+
     setStatus({ state: 'idle' });
     beforeRef.current = null;
     targetRef.current = null;

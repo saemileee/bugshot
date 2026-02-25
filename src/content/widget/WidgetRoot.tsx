@@ -107,6 +107,38 @@ export function WidgetRoot() {
   const { captureFullPage, captureElement, captureRegion } = useScreenshot(port);
 
   const beforeScreenshotRef = useRef<string | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+
+  // Helper: Scroll element into view and capture screenshot
+  const captureElementWithScroll = useCallback(async (element: Element): Promise<string | null> => {
+    try {
+      // Check if element is in viewport
+      const rect = element.getBoundingClientRect();
+      const isInViewport = (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+      );
+
+      // Scroll into view if needed
+      if (!isInViewport) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        // Wait for scroll animation to complete
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
+      // Capture screenshot
+      const dataUrl = await captureElement(element);
+      setScreenshotError(null);
+      return dataUrl;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Screenshot capture failed';
+      console.error('[Screenshot] Capture failed:', message);
+      setScreenshotError('Failed to capture screenshot. Element may be off-screen or hidden.');
+      return null;
+    }
+  }, [captureElement]);
 
   // ── Draft persistence (restore on mount, save on unmount/state change) ──
   // Note: Picked element restoration is disabled due to reliability issues
@@ -289,15 +321,13 @@ export function WidgetRoot() {
       tracking.captureBefore(picker.pickedElement);
       setActiveTab("changes");
 
-      captureElement(picker.pickedElement)
+      // Capture "before" screenshot with auto-scroll
+      captureElementWithScroll(picker.pickedElement)
         .then((dataUrl) => {
           beforeScreenshotRef.current = dataUrl;
-        })
-        .catch(() => {
-          beforeScreenshotRef.current = null;
         });
     }
-  }, [picker.pickedElement, tracking.captureBefore, captureElement]);
+  }, [picker.pickedElement, tracking.captureBefore, captureElementWithScroll]);
 
   // ── Toolbar actions ──
   const handleStartPicking = useCallback(() => {
@@ -377,13 +407,10 @@ export function WidgetRoot() {
     const el = picker.pickedElement;
     const note = editNote.trim();
 
+    // Capture "after" screenshot with auto-scroll
     let afterScreenshot: string | null = null;
     if (el) {
-      try {
-        afterScreenshot = await captureElement(el);
-      } catch {
-        /* ignore */
-      }
+      afterScreenshot = await captureElementWithScroll(el);
     }
 
     const change = tracking.captureAfter();
@@ -416,7 +443,7 @@ export function WidgetRoot() {
     beforeScreenshotRef.current = null;
     tracking.reset();
     picker.clearPicked();
-  }, [tracking, picker, captureElement, editNote]);
+  }, [tracking, picker, captureElementWithScroll, editNote]);
 
   const handleResetCapture = useCallback(() => {
     beforeScreenshotRef.current = null;
@@ -616,6 +643,36 @@ export function WidgetRoot() {
               <code className="flex-1 text-[11px] font-mono text-violet-700 overflow-hidden text-ellipsis whitespace-nowrap">
                 {editingSelector}
               </code>
+            </div>
+          )}
+
+          {/* ── Screenshot error notification ── */}
+          {screenshotError && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
+              <div className="flex items-center gap-2 text-xs text-amber-700">
+                <svg
+                  className="w-4 h-4 flex-shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span className="flex-1">{screenshotError}</span>
+                <button
+                  className="flex items-center justify-center w-5 h-5 p-0 border-none bg-transparent cursor-pointer text-amber-500 hover:text-amber-700"
+                  onClick={() => setScreenshotError(null)}
+                  title="Dismiss"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
 
