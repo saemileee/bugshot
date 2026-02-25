@@ -344,8 +344,10 @@ export function WidgetRoot() {
       const filename = `screenshot-${Date.now()}.png`;
       setScreenshots((prev) => [...prev, { original: dataUrl, filename }]);
       setActiveTab("changes");
+      setScreenshotError(null);
     } catch (err) {
       console.error("Screenshot failed:", err);
+      setScreenshotError('Failed to capture full page screenshot. Please try again.');
     } finally {
       setIsCapturing(false);
     }
@@ -364,8 +366,10 @@ export function WidgetRoot() {
       const filename = `screenshot-region-${Date.now()}.png`;
       setScreenshots((prev) => [...prev, { original: dataUrl, filename }]);
       setActiveTab("changes");
+      setScreenshotError(null);
     } catch (err) {
       console.error("Region screenshot failed:", err);
+      setScreenshotError('Failed to capture region screenshot. Please try again.');
     } finally {
       setIsCapturing(false);
     }
