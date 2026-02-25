@@ -4,6 +4,35 @@ import { STORAGE_KEYS } from '@/shared/constants';
 
 initializeMessagingHub();
 
+// KeepAlive alarm to prevent service worker from sleeping during long operations
+const KEEPALIVE_ALARM = 'bugshot_keepalive';
+let keepaliveActive = false;
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) {
+    // Alarm fired - this keeps the service worker alive
+    // Do nothing, just the act of firing keeps it awake
+    console.log('[BugShot] KeepAlive alarm fired');
+  }
+});
+
+export function startKeepAlive() {
+  if (!keepaliveActive) {
+    keepaliveActive = true;
+    // Create periodic alarm every 20 seconds to keep service worker alive
+    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 / 3 }); // 20 seconds
+    console.log('[BugShot] KeepAlive started');
+  }
+}
+
+export function stopKeepAlive() {
+  if (keepaliveActive) {
+    keepaliveActive = false;
+    chrome.alarms.clear(KEEPALIVE_ALARM);
+    console.log('[BugShot] KeepAlive stopped');
+  }
+}
+
 // Clean up draft storage when a tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   try {

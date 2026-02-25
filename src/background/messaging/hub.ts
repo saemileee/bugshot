@@ -13,6 +13,7 @@ import {
   fetchPriorities,
 } from '../jira/api';
 import { startRecording, stopRecording, getRecordingBlob, getRecordingStatus } from '../recording/manager';
+import { startKeepAlive, stopKeepAlive } from '../service-worker';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { generateSummary, buildFullDescription, buildWikiMarkupDescription } from '@/shared/utils/jira-formatter';
 import { dataUrlToBlob } from '@/shared/utils/screenshot-utils';
@@ -132,6 +133,7 @@ function handleContentPort(port: chrome.runtime.Port) {
 
       case 'SUBMIT_TO_INTEGRATIONS': {
         try {
+          startKeepAlive(); // Prevent service worker from sleeping during submission
           const results = await submitToAll(message.payload);
           port.postMessage({ type: 'INTEGRATION_RESULTS', results });
         } catch (error) {
@@ -139,6 +141,8 @@ function handleContentPort(port: chrome.runtime.Port) {
             type: 'INTEGRATION_RESULTS',
             results: [{ integrationId: 'jira', success: false, error: (error as Error).message }],
           });
+        } finally {
+          stopKeepAlive();
         }
         break;
       }
@@ -320,6 +324,7 @@ function handleOneShotMessage(
     }
 
     case 'SUBMIT_TO_INTEGRATIONS': {
+      startKeepAlive(); // Prevent service worker from sleeping during submission
       submitToAll(message.payload).then((results) => {
         sendResponse({ type: 'INTEGRATION_RESULTS', results });
       }).catch((error) => {
@@ -327,6 +332,8 @@ function handleOneShotMessage(
           type: 'INTEGRATION_RESULTS',
           results: [{ integrationId: 'jira', success: false, error: (error as Error).message }],
         });
+      }).finally(() => {
+        stopKeepAlive();
       });
       break;
     }
