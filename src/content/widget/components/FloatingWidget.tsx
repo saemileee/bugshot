@@ -273,6 +273,8 @@ export function FloatingWidget({
                   ? "Settings"
                   : isEditing
                   ? "Edit Style"
+                  : isPreviewMode
+                  ? "Review Issue"
                   : "Create Report"}
               </span>
             </div>
