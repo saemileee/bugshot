@@ -60,19 +60,22 @@ export async function submitToJira(
       createdAt: Date.now(),
     };
 
-    // Collect all filenames
-    const allFilenames = payload.screenshots.map((s) => s.filename);
+    // Collect all screenshots with descriptions
+    const allScreenshots = payload.screenshots.map((s) => ({
+      filename: s.filename,
+      description: s.description,
+    }));
     let videoFilename: string | undefined;
     if (payload.videoRecordingId) {
       // Determine extension from mimeType
       const ext = payload.videoMimeType?.includes('mp4') ? 'mp4' : 'webm';
       videoFilename = `recording-${Date.now()}.${ext}`;
-      allFilenames.push(videoFilename);
+      allScreenshots.push({ filename: videoFilename, description: undefined });
     }
 
     // Phase 1: Create issue with ADF description (fallback)
     const summary = payload.summary || generateSummary(changeSet);
-    const description = buildFullDescription(changeSet, allFilenames);
+    const description = buildFullDescription(changeSet, allScreenshots);
 
     const issue = await createIssue({
       projectKey,
@@ -121,7 +124,7 @@ export async function submitToJira(
     // Phase 3: Update with wiki markup for inline images
     if (uploadedCount > 0) {
       try {
-        const wikiDescription = buildWikiMarkupDescription(changeSet, allFilenames);
+        const wikiDescription = buildWikiMarkupDescription(changeSet, allScreenshots);
         await updateIssueDescriptionWiki(issue.key, wikiDescription);
       } catch (err) {
         console.warn('[Jira] Wiki description update failed:', err);

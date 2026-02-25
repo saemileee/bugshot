@@ -123,13 +123,13 @@ describe('jira-formatter', () => {
     });
 
     it('should reference screenshots with width format', () => {
-      const result = buildWikiMarkupDescription(baseChangeSet, ['screenshot-123.png']);
+      const result = buildWikiMarkupDescription(baseChangeSet, [{ filename: 'screenshot-123.png' }]);
       expect(result).toContain('h3. Screenshots');
       expect(result).toContain('!screenshot-123.png|width=800!');
     });
 
     it('should reference video with attachment link format', () => {
-      const result = buildWikiMarkupDescription(baseChangeSet, ['recording-456.webm']);
+      const result = buildWikiMarkupDescription(baseChangeSet, [{ filename: 'recording-456.webm' }]);
       expect(result).toContain('h3. Video');
       expect(result).toContain('[^recording-456.webm]');
     });
@@ -148,8 +148,8 @@ describe('jira-formatter', () => {
         }],
       };
       const result = buildWikiMarkupDescription(changeSet, [
-        '_header-as-is.png',
-        '_header-to-be.png',
+        { filename: '_header-as-is.png' },
+        { filename: '_header-to-be.png' },
       ]);
       // Should have table header
       expect(result).toContain('||As-Is||To-Be||');

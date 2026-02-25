@@ -508,6 +508,22 @@ function collectAttachmentFilenames(payload: JiraSubmissionPayload): {
   return { all, video };
 }
 
+function collectScreenshotsWithDescriptions(payload: JiraSubmissionPayload): {
+  all: Array<{ filename: string; description?: string }>;
+  video?: string;
+} {
+  const all = payload.screenshots.map((s) => ({
+    filename: s.filename,
+    description: s.description,
+  }));
+  let video: string | undefined;
+  if (payload.videoRecordingId) {
+    video = `recording-${Date.now()}.webm`;
+    all.push({ filename: video, description: undefined });
+  }
+  return { all, video };
+}
+
 async function uploadAttachments(
   issueKey: string,
   payload: JiraSubmissionPayload,
@@ -573,6 +589,7 @@ async function handleJiraSubmission(
 
   const changeSet = createChangeSetFromPayload(payload);
   const filenames = collectAttachmentFilenames(payload);
+  const screenshots = collectScreenshotsWithDescriptions(payload);
 
   jiraLogger.info('Submission start:', {
     changes: payload.changes.length,
@@ -584,7 +601,7 @@ async function handleJiraSubmission(
 
   // Phase 1: Create issue
   const summary = payload.summary || generateSummary(changeSet);
-  const description = buildFullDescription(changeSet, filenames.all);
+  const description = buildFullDescription(changeSet, screenshots.all);
 
   const issue = await createIssue({
     projectKey: epicConfig.projectKey,
@@ -601,7 +618,7 @@ async function handleJiraSubmission(
   // Phase 3: Update description with wiki markup for inline images
   if (uploadedCount > 0) {
     try {
-      const wikiDescription = buildWikiMarkupDescription(changeSet, filenames.all);
+      const wikiDescription = buildWikiMarkupDescription(changeSet, screenshots.all);
       await updateIssueDescriptionWiki(issue.key, wikiDescription);
       jiraLogger.info('Description updated with wiki markup (inline images)');
     } catch (err) {
@@ -645,8 +662,11 @@ async function handleDryRunSubmission(
     createdAt: Date.now(),
   };
 
-  const allFilenames = payload.screenshots.map((s) => s.filename);
-  const description = buildFullDescription(changeSet, allFilenames);
+  const allScreenshots = payload.screenshots.map((s) => ({
+    filename: s.filename,
+    description: s.description,
+  }));
+  const description = buildFullDescription(changeSet, allScreenshots);
   const summary = payload.summary || generateSummary(changeSet);
   const fakeKey = `DRYRUN-${Date.now().toString(36).toUpperCase()}`;
 

@@ -38,8 +38,9 @@ const listItem = (...content: object[]) => ({
  */
 export function buildFullDescription(
   changeSet: ChangeSet,
-  screenshotFilenames: string[],
+  screenshots: Array<{ filename: string; description?: string }>,
 ): object {
+  const screenshotFilenames = screenshots.map((s) => s.filename);
   const sections: object[] = [];
 
   for (const change of changeSet.changes) {
@@ -93,11 +94,14 @@ export function buildFullDescription(
   }
 
   // Manual screenshots
-  const manualScreenshots = screenshotFilenames.filter((n) => n.startsWith('screenshot-'));
+  const manualScreenshots = screenshots.filter((s) => s.filename.startsWith('screenshot-'));
   if (manualScreenshots.length > 0) {
     sections.push(heading(3, 'Screenshots'));
-    for (const name of manualScreenshots) {
-      sections.push(paragraph(code(name)));
+    for (const screenshot of manualScreenshots) {
+      sections.push(paragraph(code(screenshot.filename)));
+      if (screenshot.description) {
+        sections.push(paragraph(text(screenshot.description)));
+      }
     }
   }
 
@@ -145,8 +149,9 @@ export function buildFullDescription(
  */
 export function buildWikiMarkupDescription(
   changeSet: ChangeSet,
-  screenshotFilenames: string[],
+  screenshots: Array<{ filename: string; description?: string }>,
 ): string {
+  const screenshotFilenames = screenshots.map((s) => s.filename);
   const lines: string[] = [];
 
   for (const change of changeSet.changes) {
@@ -182,14 +187,17 @@ export function buildWikiMarkupDescription(
   }
 
   // Manual screenshots
-  const manualScreenshots = screenshotFilenames.filter((n) => n.startsWith('screenshot-'));
+  const manualScreenshots = screenshots.filter((s) => s.filename.startsWith('screenshot-'));
   if (manualScreenshots.length > 0) {
     lines.push('h3. Screenshots');
     lines.push('');
-    for (const name of manualScreenshots) {
-      lines.push(`!${name}|width=800!`);
+    for (const screenshot of manualScreenshots) {
+      lines.push(`!${screenshot.filename}|width=800!`);
+      if (screenshot.description) {
+        lines.push(`{quote}${screenshot.description}{quote}`);
+      }
+      lines.push('');
     }
-    lines.push('');
   }
 
   // Video

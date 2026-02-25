@@ -80,7 +80,7 @@ export interface JiraSubmissionPayload {
   changes: CSSChange[];
   summary?: string;
   manualNotes?: string;
-  screenshots: Array<{ dataUrl: string; filename: string }>;
+  screenshots: Array<{ dataUrl: string; filename: string; description?: string }>;
   videoRecordingId?: string;
   pageUrl: string;
   pageTitle: string;
