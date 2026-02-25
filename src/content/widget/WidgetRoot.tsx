@@ -123,9 +123,9 @@ export function WidgetRoot() {
 
       // Scroll into view if needed
       if (!isInViewport) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-        // Wait for scroll animation to complete
-        await new Promise(resolve => setTimeout(resolve, 300));
+        element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+        // Wait for layout recalculation
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       // Capture screenshot
