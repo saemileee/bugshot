@@ -71,6 +71,30 @@ export async function stopRecording(): Promise<void> {
 }
 
 /**
+ * Abort recording without saving (e.g., when tab is closed during recording).
+ * This stops the recording and discards any captured data.
+ */
+export async function abortRecording(): Promise<void> {
+  if (!isRecording) return;
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'abort-recording',
+      target: 'offscreen',
+    });
+  } catch (err) {
+    console.warn('Failed to send abort-recording to offscreen:', err);
+  }
+
+  isRecording = false;
+  recordingTabId = null;
+
+  try {
+    await chrome.alarms.clear('recording-keepalive');
+  } catch { /* ignore */ }
+}
+
+/**
  * Get recording status for a specific tab.
  * Returns whether the tab is currently recording.
  */

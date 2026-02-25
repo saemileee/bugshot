@@ -34,6 +34,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       break;
 
+    case 'abort-recording':
+      try {
+        abortRecording();
+        sendResponse({ success: true });
+      } catch (err) {
+        sendResponse({ success: false, error: (err as Error).message });
+      }
+      break;
+
     case 'get-recording':
       getRecordingFromDB(message.recordingId).then(async (blob) => {
         if (!blob) {
@@ -168,6 +177,20 @@ async function startRecording() {
 function stopRecording() {
   if (recorder && recorder.state !== 'inactive') {
     recorder.stop();
+  }
+}
+
+function abortRecording() {
+  // Stop recording without saving
+  if (recorder && recorder.state !== 'inactive') {
+    // Clear chunks to prevent saving
+    chunks = [];
+    recorder.stop();
+  }
+  // Clean up stream
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+    stream = null;
   }
 }
 

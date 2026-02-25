@@ -1,5 +1,6 @@
 import { initializeMessagingHub, cleanupCDPSession } from './messaging/hub';
 import './recording/manager'; // Registers alarm listener for keepalive
+import { getRecordingStatus, abortRecording } from './recording/manager';
 import { STORAGE_KEYS } from '@/shared/constants';
 
 initializeMessagingHub();
@@ -30,7 +31,7 @@ export function stopKeepAlive() {
   }
 }
 
-// Clean up draft storage and CDP sessions when a tab is closed
+// Clean up draft storage, CDP sessions, and recording when a tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   // Clean up draft
   try {
@@ -42,6 +43,17 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
   // Clean up CDP session (clear timeout and detach debugger)
   cleanupCDPSession(tabId);
+
+  // Abort recording if this tab was recording (discard without saving)
+  const recordingStatus = getRecordingStatus(tabId);
+  if (recordingStatus.isRecording) {
+    try {
+      await abortRecording();
+      console.warn('[BugShot] Recording aborted because tab', tabId, 'was closed');
+    } catch (error) {
+      console.warn('[BugShot] Failed to abort recording for closed tab', tabId, error);
+    }
+  }
 });
 
 // Update icon appearance (grayscale + translucent when disabled)
