@@ -149,6 +149,9 @@ export function useElementPicker() {
     // Throttled update to prevent excessive layout recalculations
     let rafId: number | null = null;
     const update = () => {
+      // Skip updates when tab is hidden to save CPU
+      if (document.visibilityState === 'hidden') return;
+
       if (rafId !== null) return; // Already scheduled
       rafId = requestAnimationFrame(() => {
         rafId = null;
@@ -177,11 +180,34 @@ export function useElementPicker() {
       attributeFilter: ['style', 'class'],
     });
 
+    // Pause/resume observers when tab visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Tab hidden - disconnect observers to stop CPU usage
+        resizeObserver.disconnect();
+        mutationObserver.disconnect();
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+      } else {
+        // Tab visible - reconnect observers
+        resizeObserver.observe(pickedElement);
+        mutationObserver.observe(pickedElement, {
+          attributes: true,
+          attributeFilter: ['style', 'class'],
+        });
+        update(); // Update overlay position
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       overlay.remove();
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };

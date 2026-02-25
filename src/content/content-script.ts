@@ -94,6 +94,25 @@ async function initializeWidget() {
       }
     }
   });
+
+  // Unmount widget when tab becomes hidden to save CPU/memory
+  // Remount when tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      // Tab is now in background - unmount to stop all observers/listeners
+      unmountWidget();
+    } else if (document.visibilityState === 'visible') {
+      // Tab is now active - check if widget should be mounted
+      chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE).then((result) => {
+        const visible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
+        if (visible) {
+          mountWidget();
+        }
+      }).catch(() => {
+        // Context invalidated, do nothing
+      });
+    }
+  });
 }
 
 // Initialize when DOM is ready

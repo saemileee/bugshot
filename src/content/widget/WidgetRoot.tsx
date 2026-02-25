@@ -185,6 +185,9 @@ export function WidgetRoot() {
       changes: { [key: string]: chrome.storage.StorageChange },
       areaName: string
     ) => {
+      // Skip if tab is hidden to avoid redundant IPC calls from background tabs
+      if (document.visibilityState === 'hidden') return;
+
       // Listen for changes in both sync and local storage
       if (areaName === "sync" || areaName === "local") {
         // Check if integration-related keys changed
