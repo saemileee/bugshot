@@ -35,8 +35,6 @@ export interface SubmissionPayload {
   screenshots: Array<{ dataUrl: string; filename: string; description?: string }>;
   videoRecordingId?: string;
   videoMimeType?: string;
-  videoDescription?: string;
-  videoThumbnail?: string;
   pageUrl: string;
   pageTitle: string;
   // Integration-specific options

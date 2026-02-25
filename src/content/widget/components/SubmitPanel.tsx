@@ -46,8 +46,6 @@ interface SubmitPanelProps {
   videoRecordingId?: string | null;
   videoDataUrl?: string | null;
   videoMimeType?: string | null;
-  videoDescription?: string;
-  videoThumbnail?: string | null;
   hasConnectedPlatform?: boolean;
   isPreview?: boolean;
 }
@@ -62,9 +60,7 @@ function generateHtml(
   summary: string,
   changes: CSSChange[],
   description: string,
-  screenshots: ScreenshotData[],
-  videoThumbnail?: string | null,
-  videoDescription?: string
+  screenshots: ScreenshotData[]
 ): string {
   const h: string[] = [];
   h.push(`<h2 style="margin:0 0 8px">${esc(summary)}</h2>`);
@@ -147,27 +143,9 @@ function generateHtml(
     }
   }
 
-  // Media section (screenshots + video)
-  const hasMedia = screenshots.length > 0 || videoThumbnail;
-  if (hasMedia) {
+  // Media section (screenshots only)
+  if (screenshots.length > 0) {
     h.push(`<h3 style="margin:12px 0 6px">Media</h3>`);
-
-    // Video thumbnail and description
-    if (videoThumbnail) {
-      h.push(`<div style="margin:8px 0">`);
-      h.push(`<p style="margin:4px 0;font-weight:600">Video Recording</p>`);
-      if (videoDescription?.trim()) {
-        h.push(
-          `<p style="margin:4px 0;font-size:13px;color:#475569;white-space:pre-wrap">${esc(
-            videoDescription
-          )}</p>`
-        );
-      }
-      h.push(
-        `<p style="font-size:11px;color:#64748b;margin:4px 0">Video file attached</p>`
-      );
-      h.push(`</div>`);
-    }
 
     // Screenshots with descriptions
     screenshots.forEach((screenshot, idx) => {
@@ -253,8 +231,6 @@ export function SubmitPanel({
   videoRecordingId,
   videoDataUrl,
   videoMimeType,
-  videoDescription,
-  videoThumbnail,
   hasConnectedPlatform = false,
   isPreview,
 }: SubmitPanelProps) {
@@ -435,9 +411,7 @@ export function SubmitPanel({
       editSummary,
       changes,
       description,
-      screenshots,
-      videoThumbnail,
-      videoDescription
+      screenshots
     );
     const plain = generatePlainText(editSummary, changes, description);
 
@@ -453,7 +427,7 @@ export function SubmitPanel({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [editSummary, changes, description, screenshots, videoThumbnail, videoDescription]);
+  }, [editSummary, changes, description, screenshots]);
 
   const handleSubmit = async () => {
     // Prevent submission if no platform is connected
@@ -510,8 +484,6 @@ export function SubmitPanel({
         screenshots: allScreenshots,
         videoRecordingId: videoRecordingId || undefined,
         videoMimeType: videoMimeType || undefined,
-        videoDescription: videoDescription,
-        videoThumbnail: videoThumbnail || undefined,
         pageUrl: window.location.href,
         pageTitle: document.title,
         jiraOptions:
@@ -603,26 +575,6 @@ export function SubmitPanel({
           />
         </div>
 
-        {/* Context */}
-        <div>
-          <h3 className="flex items-center gap-1 text-xs font-semibold text-slate-700 mb-2">
-            <span className="text-slate-400">[</span>Context
-            <span className="text-slate-400">]</span>
-          </h3>
-          <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-100">
-            <div>
-              Page:{" "}
-              <a
-                href={window.location.href}
-                className="text-violet-600 hover:underline"
-              >
-                {window.location.href}
-              </a>
-            </div>
-            <div className="mt-1">Captured: {new Date().toLocaleString()}</div>
-          </div>
-        </div>
-
         {/* CSS Changes */}
         {changes.length > 0 && (
           <div>
@@ -692,19 +644,6 @@ export function SubmitPanel({
           </div>
         )}
 
-        {/* Expected Result (Notes) */}
-        {description.trim() && (
-          <div>
-            <h3 className="flex items-center gap-1 text-xs font-semibold text-slate-700 mb-2">
-              <span className="text-slate-400">[</span>Expected Result
-              <span className="text-slate-400">]</span>
-            </h3>
-            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-100 whitespace-pre-wrap">
-              {description}
-            </div>
-          </div>
-        )}
-
         {/* Media */}
         {(screenshots.length > 0 || (videoRecordingId && videoDataUrl)) && (
           <div>
@@ -715,43 +654,66 @@ export function SubmitPanel({
                 {screenshots.length + (videoRecordingId ? 1 : 0)}
               </span>
             </h3>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="space-y-3">
               {screenshots.map((ss, i) => (
-                <div
-                  key={i}
-                  className="aspect-square bg-slate-100 rounded-lg border border-slate-200 overflow-hidden"
-                >
+                <div key={i} className="bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
                   <img
                     src={ss.annotated || ss.original}
                     alt={`Screenshot ${i + 1}`}
-                    className="w-full h-full object-cover"
+                    className="w-full"
                   />
+                  {ss.description && (
+                    <div className="p-3 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap border-t border-slate-200">
+                      {ss.description}
+                    </div>
+                  )}
                 </div>
               ))}
               {videoRecordingId && videoDataUrl && (
-                <div className="aspect-square bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
+                <div className="bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
                   <video
                     src={videoDataUrl}
-                    className="w-full h-full object-cover"
+                    controls
+                    className="w-full"
                   />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="text-slate-700 ml-0.5"
-                      >
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
           </div>
         )}
+
+        {/* Expected Result (Notes) */}
+        {description.trim() && (
+          <div>
+            <h3 className="flex items-center gap-1 text-xs font-semibold text-slate-700 mb-2">
+              <span className="text-slate-400">[</span>Notes
+              <span className="text-slate-400">]</span>
+            </h3>
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-100 whitespace-pre-wrap">
+              {description}
+            </div>
+          </div>
+        )}
+
+        {/* Context */}
+        <div>
+          <h3 className="flex items-center gap-1 text-xs font-semibold text-slate-700 mb-2">
+            <span className="text-slate-400">[</span>Context
+            <span className="text-slate-400">]</span>
+          </h3>
+          <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-100">
+            <div>
+              Page:{" "}
+              <a
+                href={window.location.href}
+                className="text-violet-600 hover:underline"
+              >
+                {window.location.href}
+              </a>
+            </div>
+            <div className="mt-1">Captured: {new Date().toLocaleString()}</div>
+          </div>
+        </div>
 
         {/* Copy as Markdown */}
         <Button variant="outline" className="w-full" onClick={handleCopy}>
