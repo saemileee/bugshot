@@ -261,19 +261,15 @@ function abortRecording() {
 }
 
 function getSupportedMimeType(): string {
-  // Try mp4 first (Safari supports, Chrome usually doesn't)
-  // Then fall back to webm
+  // Use WebM only - more reliable for MediaRecorder
+  // MP4 support is inconsistent and can cause immediate failures
+  // We convert to MP4 afterward using ffmpeg anyway
   const types = [
-    'video/mp4;codecs=h264',
-    'video/mp4',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm',
   ];
-  for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return 'video/webm';
+  return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? 'video/webm';
 }
 
 // IndexedDB helpers for storing recordings
