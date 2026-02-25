@@ -608,9 +608,6 @@ export function SubmitPanel({
             </h3>
             <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-3">
               {changes.map((change) => {
-                console.log('[SubmitPanel Preview] Change:', change);
-                console.log('[SubmitPanel Preview] Properties:', change.properties);
-
                 const meta = change.properties.filter((p) =>
                   SPECIAL_PROPS.has(p.property)
                 );
@@ -627,6 +624,36 @@ export function SubmitPanel({
                     {change.description && (
                       <div className="text-slate-600 leading-relaxed whitespace-pre-wrap mb-2">
                         {change.description}
+                      </div>
+                    )}
+
+                    {/* As-Is / To-Be Screenshots */}
+                    {(change.screenshotBefore || change.screenshotAfter) && (
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        {change.screenshotBefore && (
+                          <div>
+                            <div className="text-[10px] font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                              As-Is
+                            </div>
+                            <img
+                              src={change.screenshotBefore}
+                              alt="Before state"
+                              className="w-full rounded border border-slate-200"
+                            />
+                          </div>
+                        )}
+                        {change.screenshotAfter && (
+                          <div>
+                            <div className="text-[10px] font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                              To-Be
+                            </div>
+                            <img
+                              src={change.screenshotAfter}
+                              alt="After state"
+                              className="w-full rounded border border-slate-200"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 
