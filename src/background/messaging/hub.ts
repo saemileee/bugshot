@@ -45,6 +45,25 @@ const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
 // Guard to prevent duplicate listener registration
 let hubInitialized = false;
 
+/**
+ * Clean up CDP session for a specific tab (called on tab close)
+ */
+export function cleanupCDPSession(tabId: number) {
+  const session = cdpSessions.get(tabId);
+  if (session) {
+    if (session.detachTimer) {
+      clearTimeout(session.detachTimer);
+    }
+    // Try to detach (may already be detached if tab is closing)
+    chrome.debugger.detach({ tabId }).catch((error) => {
+      // Expected to fail if tab is already gone
+      console.warn('[CDP] Detach failed for tab', tabId, '(expected if tab closed):', error);
+    });
+    cdpSessions.delete(tabId);
+    console.log('[CDP] Cleaned up session for closed tab', tabId);
+  }
+}
+
 export function initializeMessagingHub() {
   if (hubInitialized) return;
   hubInitialized = true;

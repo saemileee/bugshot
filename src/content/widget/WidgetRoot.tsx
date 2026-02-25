@@ -347,10 +347,11 @@ export function WidgetRoot() {
       }
     });
 
-    // Observe DOM for element removal (watch entire document body)
-    observer.observe(document.body, {
+    // Observe DOM for element removal (watch parent to reduce CPU overhead on complex SPAs)
+    const observeTarget = element.parentElement || document.body;
+    observer.observe(observeTarget, {
       childList: true,
-      subtree: true,
+      subtree: true, // Watch descendants to catch nested removals
     });
 
     return () => {

@@ -1,4 +1,4 @@
-import { initializeMessagingHub } from './messaging/hub';
+import { initializeMessagingHub, cleanupCDPSession } from './messaging/hub';
 import './recording/manager'; // Registers alarm listener for keepalive
 import { STORAGE_KEYS } from '@/shared/constants';
 
@@ -33,8 +33,9 @@ export function stopKeepAlive() {
   }
 }
 
-// Clean up draft storage when a tab is closed
+// Clean up draft storage and CDP sessions when a tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
+  // Clean up draft
   try {
     const draftKey = `bugshot_draft_${tabId}`;
     await chrome.storage.local.remove(draftKey);
@@ -42,6 +43,9 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   } catch (error) {
     console.warn('[BugShot] Failed to clean up draft for tab', tabId, error);
   }
+
+  // Clean up CDP session (clear timeout and detach debugger)
+  cleanupCDPSession(tabId);
 });
 
 // Update icon appearance (grayscale + translucent when disabled)
