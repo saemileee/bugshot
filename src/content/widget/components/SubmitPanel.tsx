@@ -608,6 +608,9 @@ export function SubmitPanel({
             </h3>
             <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-3">
               {changes.map((change) => {
+                console.log('[SubmitPanel Preview] Change:', change);
+                console.log('[SubmitPanel Preview] Properties:', change.properties);
+
                 const meta = change.properties.filter((p) =>
                   SPECIAL_PROPS.has(p.property)
                 );

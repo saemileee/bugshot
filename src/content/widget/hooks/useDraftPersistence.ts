@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ScreenshotData } from '../WidgetRoot';
-import type { CSSChange, ElementStyleSnapshot } from '@/shared/types/css-change';
+import type { CSSChange } from '@/shared/types/css-change';
 import type { ToolbarTab } from '../components/FloatingWidget';
 
 interface DraftState {
@@ -16,10 +16,7 @@ interface DraftState {
   showPreview: boolean;
   timestamp: number;
   url: string; // Store URL to help with debugging
-  // Picked element state for restoration
-  pickedElementSelector: string | null;
-  beforeSnapshot: ElementStyleSnapshot | null;
-  beforeScreenshot: string | null;
+  // Note: Picked element restoration is disabled due to reliability issues
 }
 
 const DRAFT_KEY_PREFIX = 'bugshot_draft_';
@@ -55,9 +52,6 @@ export function useDraftPersistence({
   editNote,
   activeTab,
   showPreview,
-  pickedElementSelector,
-  beforeSnapshot,
-  beforeScreenshot,
   onRestore,
 }: {
   screenshots: ScreenshotData[];
@@ -70,9 +64,6 @@ export function useDraftPersistence({
   editNote: string;
   activeTab: ToolbarTab;
   showPreview: boolean;
-  pickedElementSelector: string | null;
-  beforeSnapshot: ElementStyleSnapshot | null;
-  beforeScreenshot: string | null;
   onRestore: (state: Omit<DraftState, 'timestamp' | 'url'>) => void;
 }) {
   const autosaveTimerRef = useRef<number | null>(null);
@@ -125,9 +116,6 @@ export function useDraftPersistence({
             editNote: draft.editNote,
             activeTab: draft.activeTab,
             showPreview: draft.showPreview,
-            pickedElementSelector: draft.pickedElementSelector,
-            beforeSnapshot: draft.beforeSnapshot,
-            beforeScreenshot: draft.beforeScreenshot,
           });
           hasRestoredRef.current = true;
         } catch (error) {
@@ -197,9 +185,6 @@ export function useDraftPersistence({
         editNote,
         activeTab,
         showPreview,
-        pickedElementSelector,
-        beforeSnapshot,
-        beforeScreenshot,
         timestamp: Date.now(),
         url: window.location.href,
       };
@@ -226,9 +211,6 @@ export function useDraftPersistence({
     editNote,
     activeTab,
     showPreview,
-    pickedElementSelector,
-    beforeSnapshot,
-    beforeScreenshot,
   ]);
 
   // ── Save draft immediately on unmount ──
@@ -264,9 +246,6 @@ export function useDraftPersistence({
           editNote,
           activeTab,
           showPreview,
-          pickedElementSelector,
-          beforeSnapshot,
-          beforeScreenshot,
           timestamp: Date.now(),
           url: window.location.href,
         };
@@ -298,9 +277,6 @@ export function useDraftPersistence({
     editNote,
     activeTab,
     showPreview,
-    pickedElementSelector,
-    beforeSnapshot,
-    beforeScreenshot,
   ]);
 }
 

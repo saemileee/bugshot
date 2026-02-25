@@ -12,7 +12,7 @@ import {
   fetchAssignableUsers,
   fetchPriorities,
 } from '../jira/api';
-import { startRecording, stopRecording, getRecordingBlob } from '../recording/manager';
+import { startRecording, stopRecording, getRecordingBlob, getRecordingStatus } from '../recording/manager';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { generateSummary, buildFullDescription, buildWikiMarkupDescription } from '@/shared/utils/jira-formatter';
 import { dataUrlToBlob } from '@/shared/utils/screenshot-utils';
@@ -196,6 +196,18 @@ function handleOneShotMessage(
       // Return the tab ID of the sender
       const tabId = _sender.tab?.id;
       sendResponse({ tabId: tabId ?? null });
+      break;
+    }
+
+    case 'GET_RECORDING_STATUS': {
+      // Return recording status for the sender's tab
+      const tabId = _sender.tab?.id;
+      if (tabId) {
+        const status = getRecordingStatus(tabId);
+        sendResponse(status);
+      } else {
+        sendResponse({ isRecording: false });
+      }
       break;
     }
 

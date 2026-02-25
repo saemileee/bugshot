@@ -2,6 +2,7 @@
 // Uses offscreen document with getDisplayMedia (no activeTab requirement)
 
 let isRecording = false;
+let recordingTabId: number | null = null;
 
 // Track offscreen document ready state
 let offscreenReady = false;
@@ -17,7 +18,7 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
-export async function startRecording(_tabId: number): Promise<void> {
+export async function startRecording(tabId: number): Promise<void> {
   if (isRecording) {
     throw new Error('Already recording');
   }
@@ -36,6 +37,7 @@ export async function startRecording(_tabId: number): Promise<void> {
   }
 
   isRecording = true;
+  recordingTabId = tabId;
 
   // Keep service worker alive during recording with alarms
   await chrome.alarms.create('recording-keepalive', { periodInMinutes: 0.4 });
@@ -54,10 +56,21 @@ export async function stopRecording(): Promise<void> {
   }
 
   isRecording = false;
+  recordingTabId = null;
 
   try {
     await chrome.alarms.clear('recording-keepalive');
   } catch { /* ignore */ }
+}
+
+/**
+ * Get recording status for a specific tab.
+ * Returns whether the tab is currently recording.
+ */
+export function getRecordingStatus(tabId: number): { isRecording: boolean } {
+  return {
+    isRecording: isRecording && recordingTabId === tabId,
+  };
 }
 
 /**

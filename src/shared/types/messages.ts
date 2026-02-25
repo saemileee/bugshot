@@ -4,6 +4,7 @@ import type { IntegrationId, IntegrationResult, SubmissionPayload } from './inte
 export type ExtensionMessage =
   // Tab utilities
   | { type: 'GET_TAB_ID' }
+  | { type: 'GET_RECORDING_STATUS' }
 
   // Screenshot (Content Script <-> Service Worker)
   | { type: 'CAPTURE_SCREENSHOT'; tabId: number }

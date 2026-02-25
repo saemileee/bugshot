@@ -16,6 +16,7 @@ import { useDraftPersistence, clearDraft } from "./hooks/useDraftPersistence";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { CSSChange } from "@/shared/types/css-change";
 import type { ExtensionMessage } from "@/shared/types/messages";
+import { STORAGE_KEYS } from "@/shared/constants";
 
 export type WidgetTab = "capture" | "describe" | "changes" | "submit";
 
@@ -107,34 +108,8 @@ export function WidgetRoot() {
 
   const beforeScreenshotRef = useRef<string | null>(null);
 
-  // ── Compute picked element state for draft persistence ──
-  const pickedElementSelector = useMemo(() => {
-    if (!picker.pickedElement) return null;
-    // Build selector from picked element
-    // We'll import buildSelector from tracking or duplicate the logic
-    const el = picker.pickedElement;
-    const parts: string[] = [];
-    let current: Element | null = el;
-    while (current && current !== document.body && parts.length < 5) {
-      let s = current.tagName.toLowerCase();
-      if (current.id) {
-        parts.unshift('#' + current.id);
-        break;
-      }
-      if (current.className && typeof current.className === 'string') {
-        const classes = current.className.trim().split(/\s+/).slice(0, 2).join('.');
-        if (classes) s += '.' + classes;
-      }
-      parts.unshift(s);
-      current = current.parentElement;
-    }
-    return parts.join(' > ');
-  }, [picker.pickedElement]);
-
-  // beforeSnapshot is now exposed from tracking hook
-  const beforeSnapshot = tracking.beforeSnapshot;
-
   // ── Draft persistence (restore on mount, save on unmount/state change) ──
+  // Note: Picked element restoration is disabled due to reliability issues
   useDraftPersistence({
     screenshots,
     description,
@@ -146,9 +121,6 @@ export function WidgetRoot() {
     editNote,
     activeTab,
     showPreview,
-    pickedElementSelector,
-    beforeSnapshot,
-    beforeScreenshot: beforeScreenshotRef.current,
     onRestore: (draft) => {
       setScreenshots(draft.screenshots);
       setDescription(draft.description);
@@ -160,21 +132,6 @@ export function WidgetRoot() {
       setEditNote(draft.editNote);
       setActiveTab(draft.activeTab);
       setShowPreview(draft.showPreview);
-
-      // Restore picked element state
-      if (draft.pickedElementSelector) {
-        const restored = picker.restorePickedElement(draft.pickedElementSelector);
-        if (restored && draft.beforeSnapshot) {
-          // Find the element again to pass to tracking
-          const element = document.querySelector(draft.pickedElementSelector);
-          if (element) {
-            tracking.restoreBefore(element, draft.beforeSnapshot);
-          }
-        }
-      }
-      if (draft.beforeScreenshot) {
-        beforeScreenshotRef.current = draft.beforeScreenshot;
-      }
     },
   });
 
@@ -226,32 +183,46 @@ export function WidgetRoot() {
     clearDraft();
   }, [recordingId, deleteRecordingFromDB, tracking, picker]);
 
-  // Helper function to check platform connection status
-  const checkPlatformStatus = useCallback(() => {
+  // Helper function to check platform connection status from storage
+  const checkPlatformStatus = useCallback(async () => {
     setCheckingAuth(true);
-    chrome.runtime.sendMessage({ type: "GET_ALL_INTEGRATIONS" }, (r) => {
-      if (r?.integrations) {
-        const enabled = (
-          r.integrations as Array<{ id: string; enabled: boolean }>
-        ).filter((i) => i.enabled);
-        const hasConnected = enabled.length > 0;
-        setHasConnectedPlatform(hasConnected);
+    try {
+      // Read directly from storage instead of API call
+      const result = await chrome.storage.sync.get(STORAGE_KEYS.INTEGRATIONS);
+      const configs = result[STORAGE_KEYS.INTEGRATIONS] || {};
 
-        if (!hasConnected) {
-          console.warn("[WidgetRoot] No connected platforms found. User must configure integrations in Settings.");
-        }
-      } else {
-        console.warn("[WidgetRoot] Failed to fetch integrations");
-        setHasConnectedPlatform(false);
+      // Check if any integration is enabled
+      const hasConnected = Object.values(configs).some(
+        (config: any) => config?.enabled === true
+      );
+
+      setHasConnectedPlatform(hasConnected);
+
+      if (!hasConnected) {
+        console.warn("[WidgetRoot] No connected platforms found. User must configure integrations in Settings.");
       }
-      setCheckingAuth(false);
-    });
+    } catch (error) {
+      console.warn("[WidgetRoot] Failed to read integrations from storage:", error);
+      setHasConnectedPlatform(false);
+    }
+    setCheckingAuth(false);
   }, []);
 
   // ── Check for connected platforms on mount ──
+  // Reads directly from storage to avoid unnecessary API calls on every tab switch
   useEffect(() => {
     checkPlatformStatus();
   }, [checkPlatformStatus]);
+
+  // ── Check recording status on mount (restore after tab switch) ──
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (response) => {
+      if (response?.isRecording) {
+        console.log('[WidgetRoot] Restoring recording state');
+        setIsRecording(true);
+      }
+    });
+  }, []);
 
   // ── Listen for storage changes (real-time platform connection updates) ──
   useEffect(() => {
