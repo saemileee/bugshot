@@ -31,7 +31,7 @@ interface DevTools {
 
 export function initDevTools() {
   // Only in development
-  if (process.env.NODE_ENV !== 'development') return;
+  if (import.meta.env.MODE !== 'development') return;
 
   const devTools: DevTools = {
     testLowEnd: (intensity = 'medium') => {

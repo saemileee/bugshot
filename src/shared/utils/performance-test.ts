@@ -17,8 +17,6 @@ export function simulateLowEndDevice(intensity: 'light' | 'medium' | 'heavy' = '
 
   const { interval, workDuration } = config[intensity];
 
-  let running = true;
-
   const doWork = () => {
     const start = performance.now();
     // Simulate CPU-intensive work
@@ -36,7 +34,6 @@ export function simulateLowEndDevice(intensity: 'light' | 'medium' | 'heavy' = '
   // Return cleanup function
   return () => {
     clearInterval(intervalId);
-    running = false;
     console.log('[PerfTest] Low-end device simulation stopped');
   };
 }
