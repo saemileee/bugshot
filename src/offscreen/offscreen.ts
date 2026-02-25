@@ -70,43 +70,49 @@ async function startRecording() {
 
   // Use getDisplayMedia — Chrome will show tab/window/screen picker
   stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
+    video: {
+      // Add constraints to ensure video is recordable
+      frameRate: { ideal: 30, max: 60 },
+    },
     audio: false,
   });
 
-  // Check if user selected a browser tab (not supported)
   const videoTrack = stream.getVideoTracks()[0];
   const settings = videoTrack?.getSettings();
 
   // @ts-ignore - displaySurface may not be in types but exists in Chrome
-  if (settings?.displaySurface === 'browser') {
-    // User selected a tab - not supported
-    stream.getTracks().forEach(track => track.stop());
-    throw new Error('Tab recording is not supported. Please select a Window or Entire Screen.');
-  }
+  const displaySurface = settings?.displaySurface || 'unknown';
+  console.log('[Recording] Display surface:', displaySurface, 'Settings:', settings);
 
   // Handle user clicking Chrome's "Stop sharing" button
   videoTrack?.addEventListener('ended', () => {
+    console.log('[Recording] Video track ended');
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
     }
   });
 
+  const mimeType = getSupportedMimeType();
+  console.log('[Recording] Using mimeType:', mimeType);
+
   recorder = new MediaRecorder(stream, {
-    mimeType: getSupportedMimeType(),
+    mimeType,
     videoBitsPerSecond: 1_500_000, // 1.5 Mbps (reduced from 2.5 Mbps for smaller file size)
   });
 
   chunks = [];
 
   recorder.ondataavailable = (event) => {
+    console.log('[Recording] Data available, size:', event.data.size);
     if (event.data.size > 0) {
       chunks.push(event.data);
     }
   };
 
   recorder.onstop = async () => {
+    console.log('[Recording] Recorder stopped, chunks:', chunks.length, 'sizes:', chunks.map(c => c.size));
     const webmBlob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
+    console.log('[Recording] WebM blob created, size:', webmBlob.size, 'type:', webmBlob.type);
     chunks = [];
 
     stream?.getTracks().forEach((track) => track.stop());
