@@ -329,6 +329,34 @@ export function WidgetRoot() {
     }
   }, [picker.pickedElement, tracking.captureBefore, captureElementWithScroll]);
 
+  // ── Monitor picked element for removal from DOM ──
+  useEffect(() => {
+    const element = picker.pickedElement;
+    if (!element) return;
+
+    const observer = new MutationObserver(() => {
+      // Check if element is still in DOM
+      if (!document.contains(element)) {
+        console.warn('[WidgetRoot] Picked element was removed from DOM');
+        setScreenshotError('Element was removed from the page. Please pick a new element.');
+        beforeScreenshotRef.current = null;
+        tracking.reset();
+        picker.clearPicked();
+        observer.disconnect();
+      }
+    });
+
+    // Observe DOM for element removal (watch entire document body)
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [picker.pickedElement, tracking, picker]);
+
   // ── Toolbar actions ──
   const handleStartPicking = useCallback(() => {
     beforeScreenshotRef.current = null;
