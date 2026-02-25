@@ -183,28 +183,44 @@ function getSupportedMimeType(): string {
 // IndexedDB helpers for storing recordings
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    console.log('[Offscreen] Opening IndexedDB...');
     const request = indexedDB.open('bugshot-recordings', 1);
     request.onupgradeneeded = () => {
+      console.log('[Offscreen] DB upgrade needed, creating object store');
       const db = request.result;
       if (!db.objectStoreNames.contains('recordings')) {
         db.createObjectStore('recordings', { keyPath: 'id' });
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      console.log('[Offscreen] IndexedDB opened successfully');
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      console.error('[Offscreen] IndexedDB open failed:', request.error);
+      reject(request.error);
+    };
   });
 }
 
 async function storeRecording(blob: Blob): Promise<string> {
+  console.log('[Offscreen] storeRecording called, blob size:', blob.size);
   const db = await openDB();
+  console.log('[Offscreen] DB opened successfully');
   const id = `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('recordings', 'readwrite');
     const store = tx.objectStore('recordings');
     store.put({ id, blob, createdAt: Date.now() });
-    tx.oncomplete = () => resolve(id);
-    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      console.log('[Offscreen] Recording stored:', id);
+      resolve(id);
+    };
+    tx.onerror = () => {
+      console.error('[Offscreen] Failed to store recording:', tx.error);
+      reject(tx.error);
+    };
   });
 }
 

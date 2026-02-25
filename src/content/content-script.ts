@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { WidgetRoot } from './widget/WidgetRoot';
 import widgetCSS from './widget/styles/widget.css?inline';
 import { STORAGE_KEYS } from '@/shared/constants';
+import { initDevTools } from './widget/dev-tools';
 
 /** Delay before retrying widget injection when DOM body is not ready */
 const DOM_READY_RETRY_DELAY_MS = 10;
@@ -101,3 +102,6 @@ if (document.readyState === 'loading') {
 } else {
   initializeWidget();
 }
+
+// Initialize dev tools (development only)
+initDevTools();
