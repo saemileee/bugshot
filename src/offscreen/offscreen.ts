@@ -89,18 +89,34 @@ async function startRecording() {
   });
 
   const videoTrack = stream.getVideoTracks()[0];
+  console.log('[Offscreen] Video track obtained:', videoTrack?.label, 'readyState:', videoTrack?.readyState);
 
   // Handle user clicking Chrome's "Stop sharing" button
   videoTrack?.addEventListener('ended', () => {
+    console.warn('[Offscreen] Video track ended (user stopped sharing or track failed)');
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
     }
   });
 
-  recorder = new MediaRecorder(stream, {
-    mimeType: getSupportedMimeType(),
-    videoBitsPerSecond: 1_500_000, // 1.5 Mbps (reduced from 2.5 Mbps for smaller file size)
-  });
+  const mimeType = getSupportedMimeType();
+  console.log('[Offscreen] Using mimeType:', mimeType);
+
+  try {
+    recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 1_500_000, // 1.5 Mbps (reduced from 2.5 Mbps for smaller file size)
+    });
+  } catch (err) {
+    console.error('[Offscreen] MediaRecorder creation failed:', err);
+    chrome.runtime.sendMessage({
+      type: 'recording-error',
+      target: 'service-worker',
+      error: `MediaRecorder not supported: ${(err as Error).message}`,
+    });
+    stream.getTracks().forEach((track) => track.stop());
+    throw err;
+  }
 
   chunks = [];
 
@@ -111,11 +127,34 @@ async function startRecording() {
   };
 
   recorder.onstop = async () => {
+    console.log('[Offscreen] MediaRecorder stopped, chunks collected:', chunks.length, 'total size:', chunks.reduce((sum, c) => sum + c.size, 0), 'bytes');
     const webmBlob = new Blob(chunks, { type: recorder?.mimeType || 'video/webm' });
     chunks = [];
 
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
+
+    // Check if recording has any data
+    if (webmBlob.size === 0) {
+      console.warn('[Offscreen] Recording was empty (0 bytes)');
+      chrome.runtime.sendMessage({
+        type: 'recording-error',
+        target: 'service-worker',
+        error: 'Recording contains no data. Please try again.',
+      });
+      return;
+    }
+
+    // Check if recording has any data
+    if (webmBlob.size === 0) {
+      console.warn('[Offscreen] Recording was empty (0 bytes), user likely canceled immediately');
+      chrome.runtime.sendMessage({
+        type: 'recording-error',
+        target: 'service-worker',
+        error: 'Recording was canceled or no data was captured',
+      });
+      return;
+    }
 
     // Send progress updates
     const sendProgress = (progress: ConversionProgress) => {
@@ -163,15 +202,32 @@ async function startRecording() {
   };
 
   recorder.onerror = (event) => {
-    console.error('MediaRecorder error:', event);
+    console.error('[Offscreen] MediaRecorder error:', event);
+    const errorDetail = (event as any).error?.message || 'Unknown error';
     chrome.runtime.sendMessage({
       type: 'recording-error',
       target: 'service-worker',
-      error: 'Recording failed during capture',
+      error: `Recording failed: ${errorDetail}`,
     });
   };
 
-  recorder.start(1000);
+  recorder.onstart = () => {
+    console.log('[Offscreen] MediaRecorder started successfully');
+  };
+
+  console.log('[Offscreen] Starting MediaRecorder...');
+  try {
+    recorder.start(1000);
+  } catch (err) {
+    console.error('[Offscreen] recorder.start() failed:', err);
+    chrome.runtime.sendMessage({
+      type: 'recording-error',
+      target: 'service-worker',
+      error: `Failed to start recording: ${(err as Error).message}`,
+    });
+    stream.getTracks().forEach((track) => track.stop());
+    throw err;
+  }
 }
 
 function stopRecording() {
