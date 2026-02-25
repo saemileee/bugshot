@@ -27,6 +27,7 @@ export function InlineScreenshotEditor({
   onRemove,
 }: InlineScreenshotEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [description, setDescription] = useState(screenshot.description || '');
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,6 +104,15 @@ export function InlineScreenshotEditor({
   const handleStartEdit = useCallback(() => {
     setIsEditing(true);
   }, []);
+
+  const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newDescription = e.target.value;
+    setDescription(newDescription);
+    onUpdate(index, {
+      ...screenshot,
+      description: newDescription,
+    });
+  }, [index, screenshot, onUpdate]);
 
   return (
     <div ref={containerRef} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -260,6 +270,20 @@ export function InlineScreenshotEditor({
           title="Click to annotate"
         />
       )}
+
+      {/* Description */}
+      <div className="p-3 border-t border-gray-100">
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">
+          Description (optional)
+        </label>
+        <textarea
+          className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          rows={2}
+          placeholder="Add a description for this screenshot..."
+          value={description}
+          onChange={handleDescriptionChange}
+        />
+      </div>
     </div>
   );
 }

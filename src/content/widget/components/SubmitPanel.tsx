@@ -46,6 +46,8 @@ interface SubmitPanelProps {
   videoRecordingId?: string | null;
   videoDataUrl?: string | null;
   videoMimeType?: string | null;
+  videoDescription?: string;
+  videoThumbnail?: string | null;
   hasConnectedPlatform?: boolean;
   isPreview?: boolean;
 }
@@ -60,7 +62,9 @@ function generateHtml(
   summary: string,
   changes: CSSChange[],
   description: string,
-  screenshotCount: number
+  screenshots: ScreenshotData[],
+  videoThumbnail?: string | null,
+  videoDescription?: string
 ): string {
   const h: string[] = [];
   h.push(`<h2 style="margin:0 0 8px">${esc(summary)}</h2>`);
@@ -143,10 +147,43 @@ function generateHtml(
     }
   }
 
-  if (screenshotCount > 0) {
-    h.push(
-      `<p style="font-size:12px;color:#64748b;margin:8px 0">${screenshotCount} screenshot(s) attached</p>`
-    );
+  // Media section (screenshots + video)
+  const hasMedia = screenshots.length > 0 || videoThumbnail;
+  if (hasMedia) {
+    h.push(`<h3 style="margin:12px 0 6px">Media</h3>`);
+
+    // Video thumbnail and description
+    if (videoThumbnail) {
+      h.push(`<div style="margin:8px 0">`);
+      h.push(`<p style="margin:4px 0;font-weight:600">Video Recording</p>`);
+      if (videoDescription?.trim()) {
+        h.push(
+          `<p style="margin:4px 0;font-size:13px;color:#475569;white-space:pre-wrap">${esc(
+            videoDescription
+          )}</p>`
+        );
+      }
+      h.push(
+        `<p style="font-size:11px;color:#64748b;margin:4px 0">Video file attached</p>`
+      );
+      h.push(`</div>`);
+    }
+
+    // Screenshots with descriptions
+    screenshots.forEach((screenshot, idx) => {
+      h.push(`<div style="margin:8px 0">`);
+      h.push(
+        `<p style="margin:4px 0;font-weight:600">Screenshot ${idx + 1}</p>`
+      );
+      if (screenshot.description?.trim()) {
+        h.push(
+          `<p style="margin:4px 0;font-size:13px;color:#475569;white-space:pre-wrap">${esc(
+            screenshot.description
+          )}</p>`
+        );
+      }
+      h.push(`</div>`);
+    });
   }
 
   if (description.trim()) {
@@ -216,6 +253,8 @@ export function SubmitPanel({
   videoRecordingId,
   videoDataUrl,
   videoMimeType,
+  videoDescription,
+  videoThumbnail,
   hasConnectedPlatform = false,
   isPreview,
 }: SubmitPanelProps) {
@@ -396,7 +435,9 @@ export function SubmitPanel({
       editSummary,
       changes,
       description,
-      screenshots.length
+      screenshots,
+      videoThumbnail,
+      videoDescription
     );
     const plain = generatePlainText(editSummary, changes, description);
 
@@ -412,7 +453,7 @@ export function SubmitPanel({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [editSummary, changes, description, screenshots.length]);
+  }, [editSummary, changes, description, screenshots, videoThumbnail, videoDescription]);
 
   const handleSubmit = async () => {
     // Prevent submission if no platform is connected
@@ -432,11 +473,12 @@ export function SubmitPanel({
     setResults(null);
     setLegacyResult(null);
 
-    // Collect all screenshots
-    const allScreenshots: Array<{ dataUrl: string; filename: string }> =
+    // Collect all screenshots with descriptions
+    const allScreenshots: Array<{ dataUrl: string; filename: string; description?: string }> =
       screenshots.map((ss) => ({
         dataUrl: ss.annotated || ss.original,
         filename: ss.filename,
+        description: ss.description,
       }));
 
     for (const c of changes) {
@@ -468,6 +510,8 @@ export function SubmitPanel({
         screenshots: allScreenshots,
         videoRecordingId: videoRecordingId || undefined,
         videoMimeType: videoMimeType || undefined,
+        videoDescription: videoDescription,
+        videoThumbnail: videoThumbnail || undefined,
         pageUrl: window.location.href,
         pageTitle: document.title,
         jiraOptions:

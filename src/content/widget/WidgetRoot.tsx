@@ -22,6 +22,7 @@ export interface ScreenshotData {
   original: string;
   annotated?: string;
   filename: string;
+  description?: string;
 }
 
 export function WidgetRoot() {
@@ -50,6 +51,8 @@ export function WidgetRoot() {
   const [recordingMimeType, setRecordingMimeType] = useState<string | null>(
     null
   );
+  const [recordingDescription, setRecordingDescription] = useState("");
+  const [recordingThumbnail, setRecordingThumbnail] = useState<string | null>(null);
   const [editNote, setEditNote] = useState("");
   const [recordError, setRecordError] = useState<string | null>(null);
   const [hasConnectedPlatform, setHasConnectedPlatform] = useState(false);
@@ -80,6 +83,27 @@ export function WidgetRoot() {
       setIsConverting(false);
       setConversionProgress(null);
       setActiveTab("changes");
+
+      // Generate thumbnail from video first frame
+      if (msg.dataUrl) {
+        const video = document.createElement('video');
+        video.src = msg.dataUrl;
+        video.crossOrigin = 'anonymous';
+        video.onloadeddata = () => {
+          video.currentTime = 0.1; // Seek to 0.1s to ensure frame is loaded
+        };
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0);
+            const thumbnailUrl = canvas.toDataURL('image/png');
+            setRecordingThumbnail(thumbnailUrl);
+          }
+        };
+      }
     }
     if (msg.type === "RECORDING_ERROR") {
       setIsRecording(false);
@@ -557,6 +581,8 @@ export function WidgetRoot() {
             videoRecordingId={recordingId}
             videoDataUrl={recordingDataUrl}
             videoMimeType={recordingMimeType}
+            videoDescription={recordingDescription}
+            videoThumbnail={recordingThumbnail}
             hasConnectedPlatform={hasConnectedPlatform}
             isPreview
           />
@@ -707,6 +733,18 @@ export function WidgetRoot() {
                           controls
                           playsInline
                         />
+                        <div className="p-3 border-t border-gray-100">
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                            Description (optional)
+                          </label>
+                          <textarea
+                            className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows={2}
+                            placeholder="Add a description for this video..."
+                            value={recordingDescription}
+                            onChange={(e) => setRecordingDescription(e.target.value)}
+                          />
+                        </div>
                       </div>
                     )}
 
