@@ -13,26 +13,24 @@ export type ConversionProgress = {
 
 export type ProgressCallback = (progress: ConversionProgress) => void;
 
+let loadingPromise: Promise<FFmpeg> | null = null;
+
 async function loadFFmpeg(onProgress: ProgressCallback): Promise<FFmpeg> {
   if (ffmpeg && ffmpeg.loaded) {
     return ffmpeg;
   }
 
-  if (isLoading) {
-    // Wait for existing load
-    while (isLoading) {
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    if (ffmpeg && ffmpeg.loaded) {
-      return ffmpeg;
-    }
+  // If already loading, return existing promise instead of polling
+  if (isLoading && loadingPromise) {
+    return loadingPromise;
   }
 
   isLoading = true;
   onProgress({ stage: 'loading', progress: 0, message: 'Loading converter...' });
 
-  try {
-    ffmpeg = new FFmpeg();
+  loadingPromise = (async () => {
+    try {
+      ffmpeg = new FFmpeg();
 
     ffmpeg.on('progress', ({ progress }) => {
       onProgress({
@@ -48,11 +46,15 @@ async function loadFFmpeg(onProgress: ProgressCallback): Promise<FFmpeg> {
       wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm',
     });
 
-    onProgress({ stage: 'loading', progress: 100, message: 'Converter ready' });
-    return ffmpeg;
-  } finally {
-    isLoading = false;
-  }
+      onProgress({ stage: 'loading', progress: 100, message: 'Converter ready' });
+      return ffmpeg;
+    } finally {
+      isLoading = false;
+      loadingPromise = null;
+    }
+  })();
+
+  return loadingPromise;
 }
 
 export async function convertWebmToMp4(

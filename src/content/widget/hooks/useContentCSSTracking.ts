@@ -52,6 +52,22 @@ function escapeCSSIdentifier(str: string): string {
   return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
 }
 
+/**
+ * Check if a class name is safe to use in a CDP selector.
+ * Skip Tailwind arbitrary values and overly complex classes.
+ */
+function isSafeClassName(className: string): boolean {
+  // Skip arbitrary values: bg-[...], text-[...], w-[...], etc.
+  if (className.includes('[')) return false;
+  // Skip classes with parentheses (functions like radial-gradient)
+  if (className.includes('(')) return false;
+  // Skip very long class names (likely complex)
+  if (className.length > 40) return false;
+  // Skip classes starting with special characters
+  if (/^[!@#$%^&*()+=]/.test(className)) return false;
+  return true;
+}
+
 function buildSelector(el: Element): string {
   const parts: string[] = [];
   let current: Element | null = el;
@@ -63,13 +79,15 @@ function buildSelector(el: Element): string {
       break;
     }
     if (current.className && typeof current.className === 'string') {
-      const classes = current.className
+      // Filter out complex/unsafe class names before using
+      const safeClasses = current.className
         .trim()
         .split(/\s+/)
+        .filter(isSafeClassName)
         .slice(0, 2)
-        .map(escapeCSSIdentifier)  // Escape each class name
+        .map(escapeCSSIdentifier)
         .join('.');
-      if (classes) s += '.' + classes;
+      if (safeClasses) s += '.' + safeClasses;
     }
     parts.unshift(s);
     current = current.parentElement;
@@ -81,11 +99,19 @@ function captureSnapshot(el: Element): ElementStyleSnapshot {
   const authored: Record<string, string> = {};
   const cssVars: Record<string, string> = {};
   let ruleCount = 0;
+  const MAX_RULES = 3000; // Reduced from 10,000 for performance
+  const MAX_PROPERTIES = 500; // Early exit if we have enough properties
 
   // ── 1. Authored styles from matched CSS rules ──
   function collectFromRules(ruleList: CSSRuleList) {
-    for (let r = 0; r < ruleList.length && ruleCount < 10_000; r++) {
+    for (let r = 0; r < ruleList.length && ruleCount < MAX_RULES; r++) {
       ruleCount++;
+
+      // Early exit if we have enough properties
+      if (Object.keys(authored).length > MAX_PROPERTIES) {
+        break;
+      }
+
       const rule = ruleList[r];
 
       // Recurse into @media, @supports, @layer, etc.
@@ -95,6 +121,11 @@ function captureSnapshot(el: Element): ElementStyleSnapshot {
 
       const styleRule = rule as CSSStyleRule;
       if (styleRule.selectorText && styleRule.style) {
+        // Skip very complex selectors (likely not relevant)
+        if (styleRule.selectorText.length > 200) {
+          continue;
+        }
+
         try {
           // Skip rules with interactive pseudo-classes (:hover, :focus, etc.)
           // These cause false positive diffs based on user interaction state

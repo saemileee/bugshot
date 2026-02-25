@@ -115,43 +115,59 @@ export function FloatingWidget({
   useEffect(() => {
     if (!isActiveDrag) return;
 
+    let rafId: number | null = null;
+
     const move = (e: MouseEvent) => {
-      if (isDragging.current === "bar") {
-        setBarPos({
-          left: Math.max(
-            0,
-            Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x)
-          ),
-          bottom: Math.max(
-            0,
-            Math.min(window.innerHeight - 44, dragOffset.current.y - e.clientY)
-          ),
-        });
-      } else if (isDragging.current === "panel") {
-        setPanelPos({
-          right: Math.max(
-            0,
-            Math.min(
-              window.innerWidth - MIN_W,
-              dragOffset.current.x - e.clientX
-            )
-          ),
-          top: Math.max(
-            0,
-            Math.min(window.innerHeight - 100, e.clientY - dragOffset.current.y)
-          ),
-        });
-      }
+      // Throttle with requestAnimationFrame to prevent excessive re-renders
+      if (rafId !== null) return;
+
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+
+        if (isDragging.current === "bar") {
+          setBarPos({
+            left: Math.max(
+              0,
+              Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x)
+            ),
+            bottom: Math.max(
+              0,
+              Math.min(window.innerHeight - 44, dragOffset.current.y - e.clientY)
+            ),
+          });
+        } else if (isDragging.current === "panel") {
+          setPanelPos({
+            right: Math.max(
+              0,
+              Math.min(
+                window.innerWidth - MIN_W,
+                dragOffset.current.x - e.clientX
+              )
+            ),
+            top: Math.max(
+              0,
+              Math.min(window.innerHeight - 100, e.clientY - dragOffset.current.y)
+            ),
+          });
+        }
+      });
     };
     const up = () => {
       isDragging.current = false;
       setIsActiveDrag(false);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
     return () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, [isActiveDrag]);
 
@@ -165,20 +181,31 @@ export function FloatingWidget({
       const startW = panelW;
       const startH = panelH;
 
+      let rafId: number | null = null;
+
       const move = (ev: MouseEvent) => {
-        setPanelW(
-          Math.max(MIN_W, Math.min(700, startW + (startX - ev.clientX)))
-        );
-        setPanelH(
-          Math.max(
-            300,
-            Math.min(window.innerHeight - 40, startH + (ev.clientY - startY))
-          )
-        );
+        // Throttle with requestAnimationFrame
+        if (rafId !== null) return;
+
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          setPanelW(
+            Math.max(MIN_W, Math.min(700, startW + (startX - ev.clientX)))
+          );
+          setPanelH(
+            Math.max(
+              300,
+              Math.min(window.innerHeight - 40, startH + (ev.clientY - startY))
+            )
+          );
+        });
       };
       const up = () => {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
@@ -316,12 +343,14 @@ export function FloatingWidget({
             "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
             "hover:bg-slate-100 hover:text-slate-600",
             isPicking && "bg-slate-100 text-slate-800",
-            isPreviewMode && "opacity-40 cursor-not-allowed"
+            (isPreviewMode || isRecording) && "opacity-40 cursor-not-allowed"
           )}
-          onClick={isPreviewMode ? flashPanel : onPickElement}
+          onClick={(isPreviewMode || isRecording) ? flashPanel : onPickElement}
           title={
             isPicking
               ? "Picking..."
+              : isRecording
+              ? "Stop recording to pick elements"
               : isPreviewMode
               ? "Exit preview to pick elements"
               : "Pick Element"
@@ -341,12 +370,14 @@ export function FloatingWidget({
             "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
             "hover:bg-slate-100 hover:text-slate-600",
             isCapturing && "bg-slate-100 text-slate-800",
-            (isPreviewMode || isPicking || isEditing) && "opacity-40 cursor-not-allowed"
+            (isPreviewMode || isPicking || isEditing || isRecording) && "opacity-40 cursor-not-allowed"
           )}
-          onClick={(isPreviewMode || isPicking || isEditing) ? flashPanel : onScreenshot}
+          onClick={(isPreviewMode || isPicking || isEditing || isRecording) ? flashPanel : onScreenshot}
           disabled={isCapturing}
           title={
-            isPicking || isEditing
+            isRecording
+              ? "Stop recording to take screenshots"
+              : isPicking || isEditing
               ? "Finish editing to take screenshots"
               : isPreviewMode
               ? "Exit preview to take screenshots"

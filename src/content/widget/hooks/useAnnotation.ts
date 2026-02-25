@@ -53,6 +53,12 @@ export function useAnnotation() {
     setCanUndo(false);
   }, []);
 
+  const resetCanvas = useCallback(() => {
+    historyRef.current = [];
+    setCanUndo(false);
+    // Don't clear the canvas here - let the component handle it
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -73,46 +79,62 @@ export function useAnnotation() {
     }
   }, [tool, saveToHistory]);
 
+  const rafIdRef = useRef<number | null>(null);
+
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas || !drawStateRef.current.isDrawing) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Throttle with requestAnimationFrame for performance
+    if (rafIdRef.current !== null) return;
 
-    if (tool === 'freehand') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = strokeWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    } else if (tool === 'rectangle' || tool === 'arrow') {
-      // For rectangle/arrow, redraw from history on each move
-      if (historyRef.current.length > 0) {
-        ctx.putImageData(historyRef.current[historyRef.current.length - 1], 0, 0);
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+
+      if (tool === 'freehand') {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = strokeWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      } else if (tool === 'rectangle' || tool === 'arrow') {
+        // For rectangle/arrow, redraw from history on each move
+        if (historyRef.current.length > 0) {
+          ctx.putImageData(historyRef.current[historyRef.current.length - 1], 0, 0);
+        }
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = strokeWidth;
+        ctx.lineCap = 'round';
+
+        const { startX, startY } = drawStateRef.current;
+
+        if (tool === 'rectangle') {
+          ctx.strokeRect(startX, startY, x - startX, y - startY);
+        } else if (tool === 'arrow') {
+          drawArrow(ctx, startX, startY, x, y, color, strokeWidth);
+        }
       }
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = strokeWidth;
-      ctx.lineCap = 'round';
-
-      const { startX, startY } = drawStateRef.current;
-
-      if (tool === 'rectangle') {
-        ctx.strokeRect(startX, startY, x - startX, y - startY);
-      } else if (tool === 'arrow') {
-        drawArrow(ctx, startX, startY, x, y, color, strokeWidth);
-      }
-    }
+    });
   }, [tool, color, strokeWidth]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Cancel any pending RAF
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas || !drawStateRef.current.isDrawing) return;
     const ctx = canvas.getContext('2d');
@@ -150,6 +172,7 @@ export function useAnnotation() {
     canUndo,
     undo,
     clearAll,
+    resetCanvas,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
