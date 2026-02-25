@@ -68,20 +68,25 @@ async function startRecording() {
     stream = null;
   }
 
-  // Use getDisplayMedia — Only allow window/monitor, exclude browser tabs
+  // Use getDisplayMedia — Chrome will show tab/window/screen picker
   stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      displaySurface: 'monitor', // Prefer full screen, but Chrome may show window option too
-    },
+    video: true,
     audio: false,
-    // @ts-ignore - Chrome-specific options not in standard types
-    preferCurrentTab: false, // Don't prioritize current tab
-    // @ts-ignore
-    selfBrowserSurface: 'exclude', // Exclude browser tabs from picker
   });
 
+  // Check if user selected a browser tab (not supported)
+  const videoTrack = stream.getVideoTracks()[0];
+  const settings = videoTrack?.getSettings();
+
+  // @ts-ignore - displaySurface may not be in types but exists in Chrome
+  if (settings?.displaySurface === 'browser') {
+    // User selected a tab - not supported
+    stream.getTracks().forEach(track => track.stop());
+    throw new Error('Tab recording is not supported. Please select a Window or Entire Screen.');
+  }
+
   // Handle user clicking Chrome's "Stop sharing" button
-  stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+  videoTrack?.addEventListener('ended', () => {
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
     }
