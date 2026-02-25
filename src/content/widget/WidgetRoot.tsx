@@ -153,6 +153,7 @@ export function WidgetRoot() {
     editNote,
     activeTab,
     showPreview,
+    isRecording,
     onRestore: (draft) => {
       setScreenshots(draft.screenshots);
       setDescription(draft.description);

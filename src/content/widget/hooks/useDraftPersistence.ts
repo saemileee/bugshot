@@ -14,6 +14,7 @@ interface DraftState {
   editNote: string;
   activeTab: ToolbarTab;
   showPreview: boolean;
+  isRecording: boolean; // Track recording state for proper UI sync after tab switch
   timestamp: number;
   url: string; // Store URL to help with debugging
   // Note: Picked element restoration is disabled due to reliability issues
@@ -52,6 +53,7 @@ export function useDraftPersistence({
   editNote,
   activeTab,
   showPreview,
+  isRecording,
   onRestore,
 }: {
   screenshots: ScreenshotData[];
@@ -64,7 +66,8 @@ export function useDraftPersistence({
   editNote: string;
   activeTab: ToolbarTab;
   showPreview: boolean;
-  onRestore: (state: Omit<DraftState, 'timestamp' | 'url'>) => void;
+  isRecording: boolean;
+  onRestore: (state: Omit<DraftState, 'timestamp' | 'url' | 'isRecording'>) => void;
 }) {
   const autosaveTimerRef = useRef<number | null>(null);
   const isRestoringRef = useRef(false);
@@ -100,6 +103,7 @@ export function useDraftPersistence({
           screenshots: draft.screenshots.length,
           changes: draft.changes.length,
           hasRecording: !!draft.recordingId,
+          wasRecording: draft.isRecording,
           savedAt: new Date(draft.timestamp).toLocaleTimeString(),
           url: draft.url,
         });
@@ -116,6 +120,8 @@ export function useDraftPersistence({
             editNote: draft.editNote,
             activeTab: draft.activeTab,
             showPreview: draft.showPreview,
+            // Note: isRecording state is NOT restored from draft
+            // Always check actual recording status via GET_RECORDING_STATUS message
           });
           hasRestoredRef.current = true;
         } catch (error) {
@@ -185,6 +191,7 @@ export function useDraftPersistence({
         editNote,
         activeTab,
         showPreview,
+        isRecording,
         timestamp: Date.now(),
         url: window.location.href,
       };
@@ -211,6 +218,7 @@ export function useDraftPersistence({
     editNote,
     activeTab,
     showPreview,
+    isRecording,
   ]);
 
   // ── Save draft immediately on unmount ──
@@ -246,6 +254,7 @@ export function useDraftPersistence({
           editNote,
           activeTab,
           showPreview,
+          isRecording,
           timestamp: Date.now(),
           url: window.location.href,
         };
@@ -277,6 +286,7 @@ export function useDraftPersistence({
     editNote,
     activeTab,
     showPreview,
+    isRecording,
   ]);
 }
 
