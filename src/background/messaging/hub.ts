@@ -192,6 +192,13 @@ function handleOneShotMessage(
   sendResponse: (response: unknown) => void,
 ) {
   switch (message.type) {
+    case 'GET_TAB_ID': {
+      // Return the tab ID of the sender
+      const tabId = _sender.tab?.id;
+      sendResponse({ tabId: tabId ?? null });
+      break;
+    }
+
     case 'SAVE_JIRA_CREDENTIALS': {
       saveAndVerify(message.email, message.apiToken, message.siteUrl).then((result) => {
         if (result.success) {

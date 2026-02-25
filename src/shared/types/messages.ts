@@ -2,6 +2,9 @@ import type { CSSChange } from './css-change';
 import type { IntegrationId, IntegrationResult, SubmissionPayload } from './integration';
 
 export type ExtensionMessage =
+  // Tab utilities
+  | { type: 'GET_TAB_ID' }
+
   // Screenshot (Content Script <-> Service Worker)
   | { type: 'CAPTURE_SCREENSHOT'; tabId: number }
   | { type: 'SCREENSHOT_CAPTURED'; dataUrl: string }

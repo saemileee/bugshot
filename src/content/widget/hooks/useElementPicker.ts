@@ -222,5 +222,21 @@ export function useElementPicker() {
     setPickedElement(null);
   }, []);
 
-  return { isPicking, pickedElement, startPicking, clearPicked };
+  const restorePickedElement = useCallback((selector: string) => {
+    try {
+      const element = document.querySelector(selector);
+      if (element) {
+        setPickedElement(element);
+        return true;
+      } else {
+        console.warn('[ElementPicker] Could not find element with selector:', selector);
+        return false;
+      }
+    } catch (error) {
+      console.error('[ElementPicker] Invalid selector:', selector, error);
+      return false;
+    }
+  }, []);
+
+  return { isPicking, pickedElement, startPicking, clearPicked, restorePickedElement };
 }

@@ -12,6 +12,7 @@ import { useSWMessaging } from "./hooks/useSWMessaging";
 import { useElementPicker } from "./hooks/useElementPicker";
 import { useContentCSSTracking } from "./hooks/useContentCSSTracking";
 import { useScreenshot } from "./hooks/useScreenshot";
+import { useDraftPersistence, clearDraft } from "./hooks/useDraftPersistence";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { CSSChange } from "@/shared/types/css-change";
 import type { ExtensionMessage } from "@/shared/types/messages";
@@ -106,6 +107,77 @@ export function WidgetRoot() {
 
   const beforeScreenshotRef = useRef<string | null>(null);
 
+  // ── Compute picked element state for draft persistence ──
+  const pickedElementSelector = useMemo(() => {
+    if (!picker.pickedElement) return null;
+    // Build selector from picked element
+    // We'll import buildSelector from tracking or duplicate the logic
+    const el = picker.pickedElement;
+    const parts: string[] = [];
+    let current: Element | null = el;
+    while (current && current !== document.body && parts.length < 5) {
+      let s = current.tagName.toLowerCase();
+      if (current.id) {
+        parts.unshift('#' + current.id);
+        break;
+      }
+      if (current.className && typeof current.className === 'string') {
+        const classes = current.className.trim().split(/\s+/).slice(0, 2).join('.');
+        if (classes) s += '.' + classes;
+      }
+      parts.unshift(s);
+      current = current.parentElement;
+    }
+    return parts.join(' > ');
+  }, [picker.pickedElement]);
+
+  // beforeSnapshot is now exposed from tracking hook
+  const beforeSnapshot = tracking.beforeSnapshot;
+
+  // ── Draft persistence (restore on mount, save on unmount/state change) ──
+  useDraftPersistence({
+    screenshots,
+    description,
+    changes,
+    recordingId,
+    recordingDataUrl,
+    recordingSize,
+    recordingMimeType,
+    editNote,
+    activeTab,
+    showPreview,
+    pickedElementSelector,
+    beforeSnapshot,
+    beforeScreenshot: beforeScreenshotRef.current,
+    onRestore: (draft) => {
+      setScreenshots(draft.screenshots);
+      setDescription(draft.description);
+      setChanges(draft.changes);
+      setRecordingId(draft.recordingId);
+      setRecordingDataUrl(draft.recordingDataUrl);
+      setRecordingSize(draft.recordingSize);
+      setRecordingMimeType(draft.recordingMimeType);
+      setEditNote(draft.editNote);
+      setActiveTab(draft.activeTab);
+      setShowPreview(draft.showPreview);
+
+      // Restore picked element state
+      if (draft.pickedElementSelector) {
+        const restored = picker.restorePickedElement(draft.pickedElementSelector);
+        if (restored && draft.beforeSnapshot) {
+          // Find the element again to pass to tracking
+          const element = document.querySelector(draft.pickedElementSelector);
+          if (element) {
+            tracking.restoreBefore(element, draft.beforeSnapshot);
+          }
+        }
+      }
+      if (draft.beforeScreenshot) {
+        beforeScreenshotRef.current = draft.beforeScreenshot;
+      }
+    },
+  });
+
   // ── Helper to delete recording from IndexedDB ──
   const deleteRecordingFromDB = useCallback(async (recId: string) => {
     try {
@@ -150,6 +222,8 @@ export function WidgetRoot() {
     beforeScreenshotRef.current = null;
     tracking.reset();
     picker.clearPicked();
+    // Clear saved draft from storage
+    clearDraft();
   }, [recordingId, deleteRecordingFromDB, tracking, picker]);
 
   // Helper function to check platform connection status
@@ -204,18 +278,12 @@ export function WidgetRoot() {
   }, [checkPlatformStatus]);
 
   // ── Cleanup on unmount (widget deactivated) ──
-  useEffect(() => {
-    return () => {
-      // Delete recording from IndexedDB when widget is deactivated
-      const currentRecordingId = recordingIdRef.current;
-      if (currentRecordingId) {
-        chrome.runtime.sendMessage({
-          type: "DELETE_RECORDING",
-          recordingId: currentRecordingId,
-        }).catch(() => { /* ignore */ });
-      }
-    };
-  }, []);
+  // Note: We DON'T delete recordings on unmount anymore because draft state
+  // is now persisted across tab visibility changes. Recordings are only deleted when:
+  // 1. User explicitly clears them (handleClearRecording)
+  // 2. User clears all drafts (handleClearAll)
+  // 3. New recording replaces old one (handlePortMessage)
+  // 4. After 24h auto-cleanup (background worker)
 
   const isEditing = tracking.status.state === "before_captured";
   const hasContent =
@@ -417,6 +485,8 @@ export function WidgetRoot() {
     setIsConverting(false);
     setConversionProgress(null);
     setShowPreview(false);
+    // Clear saved draft from storage after successful submission
+    clearDraft();
   }, []);
 
   // ── Derived ──

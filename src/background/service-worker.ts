@@ -4,6 +4,17 @@ import { STORAGE_KEYS } from '@/shared/constants';
 
 initializeMessagingHub();
 
+// Clean up draft storage when a tab is closed
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const draftKey = `bugshot_draft_${tabId}`;
+    await chrome.storage.local.remove(draftKey);
+    console.log('[BugShot] Cleaned up draft for closed tab', tabId);
+  } catch (error) {
+    console.warn('[BugShot] Failed to clean up draft for tab', tabId, error);
+  }
+});
+
 // Update icon appearance (grayscale + translucent when disabled)
 async function updateIcon(enabled: boolean) {
   const sizes = [16, 32] as const;

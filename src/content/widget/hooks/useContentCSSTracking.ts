@@ -265,5 +265,14 @@ export function useContentCSSTracking() {
     targetRef.current = null;
   }, []);
 
-  return { status, captureBefore, captureAfter, reset };
+  const restoreBefore = useCallback((el: Element, snapshot: ElementStyleSnapshot) => {
+    targetRef.current = el;
+    beforeRef.current = snapshot;
+    setStatus({ state: 'before_captured', selector: snapshot.selector });
+  }, []);
+
+  // Expose beforeSnapshot for draft persistence
+  const beforeSnapshot = beforeRef.current;
+
+  return { status, captureBefore, captureAfter, reset, restoreBefore, beforeSnapshot };
 }
