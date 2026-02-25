@@ -83,7 +83,7 @@ async function startRecording() {
 
   recorder = new MediaRecorder(stream, {
     mimeType: getSupportedMimeType(),
-    videoBitsPerSecond: 2_500_000,
+    videoBitsPerSecond: 1_500_000, // 1.5 Mbps (reduced from 2.5 Mbps for smaller file size)
   });
 
   chunks = [];
