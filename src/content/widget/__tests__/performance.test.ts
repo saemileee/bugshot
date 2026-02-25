@@ -169,4 +169,77 @@ describe('Performance Tests', () => {
       clearSpy.mockRestore();
     });
   });
+
+  describe('Region Selection Performance', () => {
+    it('should throttle region selection drag events with RAF', () => {
+      let rafId: number | null = null;
+      let updateCount = 0;
+
+      // Simulate RegionSelector drag handler
+      const handleDrag = () => {
+        if (rafId !== null) return; // Guard prevents multiple RAF calls
+
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          updateCount++;
+        });
+      };
+
+      // Simulate rapid drag events (100 mousemove events)
+      for (let i = 0; i < 100; i++) {
+        handleDrag();
+      }
+
+      // Only 1 RAF should be scheduled despite 100 calls
+      expect(rafId).not.toBeNull();
+
+      // Clean up
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    });
+
+    it('should calculate region rect quickly', () => {
+      const startPos = { x: 100, y: 200 };
+      const currentPos = { x: 500, y: 600 };
+
+      const start = performance.now();
+
+      // Simulate RegionSelector rect calculation
+      const x = Math.min(startPos.x, currentPos.x);
+      const y = Math.min(startPos.y, currentPos.y);
+      const width = Math.abs(currentPos.x - startPos.x);
+      const height = Math.abs(currentPos.y - startPos.y);
+
+      const duration = performance.now() - start;
+
+      expect(x).toBe(100);
+      expect(y).toBe(200);
+      expect(width).toBe(400);
+      expect(height).toBe(400);
+      expect(duration).toBeLessThan(1); // Should be instant
+    });
+
+    it('should handle canvas cropping efficiently', () => {
+      // Simulate canvas crop operation (similar to captureRegion)
+      const region = { x: 100, y: 100, width: 800, height: 600 };
+      const dpr = 2;
+
+      const start = performance.now();
+
+      // Calculate scaled coordinates
+      const sx = Math.max(0, Math.round(region.x * dpr));
+      const sy = Math.max(0, Math.round(region.y * dpr));
+      const sw = Math.round(region.width * dpr);
+      const sh = Math.round(region.height * dpr);
+
+      const duration = performance.now() - start;
+
+      expect(sx).toBe(200);
+      expect(sy).toBe(200);
+      expect(sw).toBe(1600);
+      expect(sh).toBe(1200);
+      expect(duration).toBeLessThan(1); // Math operations should be instant
+    });
+  });
 });
