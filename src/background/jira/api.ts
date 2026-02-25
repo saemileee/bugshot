@@ -406,10 +406,16 @@ export interface JiraPriority {
 /**
  * Fetch assignable users for a project.
  */
-export async function fetchAssignableUsers(projectKey: string): Promise<JiraUser[]> {
+export async function fetchAssignableUsers(
+  projectKey: string,
+  query?: string
+): Promise<JiraUser[]> {
   try {
+    // Increase maxResults to 200 to show more users
+    // If query is provided, use it to filter results
+    const queryParam = query ? `&query=${encodeURIComponent(query)}` : '';
     const response = await jiraFetch(
-      `/rest/api/3/user/assignable/search?project=${projectKey}&maxResults=50`,
+      `/rest/api/3/user/assignable/search?project=${projectKey}&maxResults=200${queryParam}`,
     );
     const data = await response.json();
     return (data || []).map((u: Record<string, unknown>) => ({
