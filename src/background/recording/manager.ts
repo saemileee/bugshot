@@ -23,24 +23,31 @@ export async function startRecording(tabId: number): Promise<void> {
     throw new Error('Already recording');
   }
 
-  // Ensure offscreen document exists
-  await ensureOffscreenDocument();
+  try {
+    // Ensure offscreen document exists
+    await ensureOffscreenDocument();
 
-  // Tell offscreen document to start recording via getDisplayMedia
-  const result: { success: boolean; error?: string } = await chrome.runtime.sendMessage({
-    type: 'start-recording',
-    target: 'offscreen',
-  });
+    // Tell offscreen document to start recording via getDisplayMedia
+    const result: { success: boolean; error?: string } = await chrome.runtime.sendMessage({
+      type: 'start-recording',
+      target: 'offscreen',
+    });
 
-  if (!result?.success) {
-    throw new Error(result?.error || 'Failed to start recording');
+    if (!result?.success) {
+      throw new Error(result?.error || 'Failed to start recording');
+    }
+
+    isRecording = true;
+    recordingTabId = tabId;
+
+    // Keep service worker alive during recording with alarms
+    await chrome.alarms.create('recording-keepalive', { periodInMinutes: 0.4 });
+  } catch (error) {
+    // Reset state if recording failed to start
+    isRecording = false;
+    recordingTabId = null;
+    throw error;
   }
-
-  isRecording = true;
-  recordingTabId = tabId;
-
-  // Keep service worker alive during recording with alarms
-  await chrome.alarms.create('recording-keepalive', { periodInMinutes: 0.4 });
 }
 
 export async function stopRecording(): Promise<void> {
@@ -71,6 +78,17 @@ export function getRecordingStatus(tabId: number): { isRecording: boolean } {
   return {
     isRecording: isRecording && recordingTabId === tabId,
   };
+}
+
+/**
+ * Reset recording state (called when recording is deleted or cleared)
+ */
+export function resetRecordingState(): void {
+  isRecording = false;
+  recordingTabId = null;
+  chrome.alarms.clear('recording-keepalive').catch(() => {
+    // Ignore errors
+  });
 }
 
 /**

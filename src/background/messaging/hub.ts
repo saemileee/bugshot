@@ -12,7 +12,7 @@ import {
   fetchAssignableUsers,
   fetchPriorities,
 } from '../jira/api';
-import { startRecording, stopRecording, getRecordingBlob, getRecordingStatus } from '../recording/manager';
+import { startRecording, stopRecording, getRecordingBlob, getRecordingStatus, resetRecordingState } from '../recording/manager';
 import { startKeepAlive, stopKeepAlive } from '../service-worker';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { generateSummary, buildFullDescription, buildWikiMarkupDescription } from '@/shared/utils/jira-formatter';
@@ -464,6 +464,9 @@ function handleOneShotMessage(
     }
 
     case 'DELETE_RECORDING': {
+      // Reset recording state first to prevent "Already recording" errors
+      resetRecordingState();
+
       // Forward to offscreen document to delete from IndexedDB
       chrome.runtime.sendMessage({
         type: 'delete-recording',
