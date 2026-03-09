@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { FloatingWidget, type ToolbarTab } from "./components/FloatingWidget";
 import { ChangesSummary } from "./components/ChangesSummary";
 import { StyleEditor } from "./components/StyleEditor";
+import { ElementBreadcrumb } from "./components/ElementBreadcrumb";
 import { InlineScreenshotEditor } from "./components/InlineScreenshotEditor";
 import { ManualDescription } from "./components/ManualDescription";
 import { SubmitPanel } from "./components/SubmitPanel";
@@ -366,6 +367,13 @@ export function WidgetRoot() {
     picker.startPicking();
   }, [tracking, picker]);
 
+  // ── Breadcrumb navigation: select a different element ──
+  // Note: We only call selectElement here. The useEffect watching pickedElement
+  // will automatically handle tracking.captureBefore and screenshot capture.
+  const handleBreadcrumbSelect = useCallback((element: Element) => {
+    picker.selectElement(element);
+  }, [picker]);
+
   const handleToolbarScreenshot = useCallback(async () => {
     setIsCapturing(true);
     try {
@@ -520,12 +528,6 @@ export function WidgetRoot() {
     clearDraft();
   }, []);
 
-  // ── Derived ──
-  const editingSelector =
-    isEditing && tracking.status.state === "before_captured"
-      ? tracking.status.selector
-      : "";
-
   // ── Footer content (only for changes tab, memoized to avoid unnecessary re-renders) ──
   const footerContent = useMemo(() => {
     if (activeTab !== "changes") return null;
@@ -670,12 +672,15 @@ export function WidgetRoot() {
 
       return (
         <>
-          {/* ── Editing bar (selector display) ── */}
-          {isEditing && (
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-violet-50 border-b border-violet-100">
-              <code className="flex-1 text-[11px] font-mono text-violet-700 overflow-hidden text-ellipsis whitespace-nowrap">
-                {editingSelector}
-              </code>
+          {/* ── Editing bar (element breadcrumb navigation) ── */}
+          {isEditing && picker.pickedElement && (
+            <div className="px-3 py-2 bg-violet-50 border-b border-violet-100">
+              <ElementBreadcrumb
+                element={picker.pickedElement}
+                onSelectElement={handleBreadcrumbSelect}
+                onHoverElement={picker.showHoverHighlight}
+                onHoverEnd={picker.hideHoverHighlight}
+              />
             </div>
           )}
 
@@ -712,10 +717,7 @@ export function WidgetRoot() {
           {/* ── Editing mode: Style Editor ── */}
           {isEditing && picker.pickedElement && (
             <section className="flex-1 flex flex-col min-h-0">
-              <StyleEditor
-                element={picker.pickedElement}
-                selector={editingSelector}
-              />
+              <StyleEditor element={picker.pickedElement} />
             </section>
           )}
 

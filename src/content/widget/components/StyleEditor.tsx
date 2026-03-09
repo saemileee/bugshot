@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { PropertyValueInput } from './PropertyValueInput';
 import { PropertyNameInput } from './PropertyNameInput';
 import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
@@ -7,7 +7,50 @@ import { cn } from '@/shared/utils/cn';
 
 interface StyleEditorProps {
   element: Element;
-  selector: string;
+}
+
+/* ── Selector builder for CDP ── */
+
+function escapeCSSIdentifier(str: string): string {
+  return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
+}
+
+function isSafeClassName(className: string): boolean {
+  if (className.includes('[')) return false;
+  if (className.includes('(')) return false;
+  if (className.length > 40) return false;
+  if (/^[!@#$%^&*()+=]/.test(className)) return false;
+  return true;
+}
+
+function buildSelectorForElement(el: Element): string {
+  if (el === document.documentElement) return 'html';
+  if (el === document.body) return 'body';
+
+  const parts: string[] = [];
+  let current: Element | null = el;
+
+  while (current && current !== document.body && parts.length < 5) {
+    let s = current.tagName.toLowerCase();
+    if (current.id) {
+      parts.unshift('#' + escapeCSSIdentifier(current.id));
+      break;
+    }
+    if (current.className && typeof current.className === 'string') {
+      const safeClasses = current.className
+        .trim()
+        .split(/\s+/)
+        .filter(isSafeClassName)
+        .slice(0, 2)
+        .map(escapeCSSIdentifier)
+        .join('.');
+      if (safeClasses) s += '.' + safeClasses;
+    }
+    parts.unshift(s);
+    current = current.parentElement;
+  }
+
+  return parts.length > 0 ? parts.join(' > ') : el.tagName.toLowerCase();
 }
 
 /* ── Shorthand property grouping ── */
@@ -233,7 +276,7 @@ interface StyleRuleBlock {
 
 /* ── Component ── */
 
-export function StyleEditor({ element, selector }: StyleEditorProps) {
+export function StyleEditor({ element }: StyleEditorProps) {
   const [className, setClassName] = useState('');
   const [textContent, setTextContent] = useState('');
   const [blocks, setBlocks] = useState<StyleRuleBlock[]>([]);
@@ -244,6 +287,9 @@ export function StyleEditor({ element, selector }: StyleEditorProps) {
   const [isLoading, setIsLoading] = useState(true);
   const htmlEl = useRef<HTMLElement | null>(null);
   const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
+
+  // Generate selector from element directly to avoid timing issues
+  const selector = useMemo(() => buildSelectorForElement(element), [element]);
 
   useEffect(() => {
     htmlEl.current = element as HTMLElement;

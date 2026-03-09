@@ -238,5 +238,64 @@ export function useElementPicker() {
     }
   }, []);
 
-  return { isPicking, pickedElement, startPicking, clearPicked, restorePickedElement };
+  // Allow external code to change the picked element (e.g., from breadcrumb navigation)
+  const selectElement = useCallback((element: Element) => {
+    setPickedElement(element);
+  }, []);
+
+  // ── Hover highlight for breadcrumb preview ──
+  const hoverHighlightRef = useRef<HTMLDivElement | null>(null);
+
+  const showHoverHighlight = useCallback((element: Element) => {
+    if (!hoverHighlightRef.current) {
+      const highlight = document.createElement('div');
+      highlight.id = 'bugshot-hover-highlight';
+      highlight.style.cssText = [
+        'position:fixed',
+        'z-index:2147483644',
+        'pointer-events:none',
+        'border:2px dashed #f59e0b',
+        'background:rgba(245,158,11,0.08)',
+        'border-radius:3px',
+        'transition:top .1s,left .1s,width .1s,height .1s',
+      ].join(';');
+      document.documentElement.appendChild(highlight);
+      hoverHighlightRef.current = highlight;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const hl = hoverHighlightRef.current;
+    hl.style.display = 'block';
+    hl.style.top = rect.top + 'px';
+    hl.style.left = rect.left + 'px';
+    hl.style.width = rect.width + 'px';
+    hl.style.height = rect.height + 'px';
+  }, []);
+
+  const hideHoverHighlight = useCallback(() => {
+    if (hoverHighlightRef.current) {
+      hoverHighlightRef.current.style.display = 'none';
+    }
+  }, []);
+
+  // Cleanup hover highlight on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverHighlightRef.current) {
+        hoverHighlightRef.current.remove();
+        hoverHighlightRef.current = null;
+      }
+    };
+  }, []);
+
+  return {
+    isPicking,
+    pickedElement,
+    startPicking,
+    clearPicked,
+    restorePickedElement,
+    selectElement,
+    showHoverHighlight,
+    hideHoverHighlight,
+  };
 }

@@ -71,6 +71,15 @@ function isSafeClassName(className: string): boolean {
 function buildSelector(el: Element): string {
   const parts: string[] = [];
   let current: Element | null = el;
+
+  // Handle html and body elements directly
+  if (current === document.documentElement) {
+    return 'html';
+  }
+  if (current === document.body) {
+    return 'body';
+  }
+
   while (current && current !== document.body && parts.length < 5) {
     let s = current.tagName.toLowerCase();
     if (current.id) {
@@ -92,6 +101,12 @@ function buildSelector(el: Element): string {
     parts.unshift(s);
     current = current.parentElement;
   }
+
+  // Ensure we always have at least the element's tag name
+  if (parts.length === 0) {
+    return el.tagName.toLowerCase();
+  }
+
   return parts.join(' > ');
 }
 
