@@ -58,7 +58,18 @@ export type ExtensionMessage =
 
   // CDP CSS inspection
   | { type: 'GET_ELEMENT_STYLES'; selector: string }
-  | { type: 'ELEMENT_STYLES_RESULT'; success: boolean; styles?: CDPStyleResult; error?: string };
+  | { type: 'ELEMENT_STYLES_RESULT'; success: boolean; styles?: CDPStyleResult; error?: string }
+
+  // Side Panel Bridge messages (content script <-> side panel via service worker)
+  | { type: 'START_PICKING' }
+  | { type: 'CANCEL_PICKING' }
+  | { type: 'ELEMENT_PICKED'; cssChange?: Partial<CSSChange> }
+  | { type: 'PICKING_CANCELLED' }
+  | { type: 'START_REGION_SELECT' }
+  | { type: 'SIDEPANEL_ELEMENT_PICKED'; cssChange: Partial<CSSChange> }
+  | { type: 'SIDEPANEL_PICKING_CANCELLED' }
+  | { type: 'SIDEPANEL_REGION_SELECTED'; region: { x: number; y: number; width: number; height: number } }
+  | { type: 'SIDEPANEL_REGION_CANCELLED' };
 
 // CDP CSS result structure
 export interface CDPStyleRule {

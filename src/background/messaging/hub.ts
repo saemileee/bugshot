@@ -112,6 +112,51 @@ export function initializeMessagingHub() {
       return false;
     }
 
+    // Side panel bridge messages from content script
+    if (message.type === 'SIDEPANEL_ELEMENT_PICKED') {
+      // Forward to all connected ports (side panel listens via port)
+      for (const [, port] of contentPorts) {
+        port.postMessage({
+          type: 'ELEMENT_PICKED',
+          cssChange: message.cssChange,
+        });
+      }
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (message.type === 'SIDEPANEL_PICKING_CANCELLED') {
+      for (const [, port] of contentPorts) {
+        port.postMessage({ type: 'PICKING_CANCELLED' });
+      }
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (message.type === 'SIDEPANEL_REGION_SELECTED') {
+      // Capture screenshot of the region
+      chrome.tabs.captureVisibleTab({ format: 'png', quality: 100 })
+        .then((dataUrl) => {
+          for (const [, port] of contentPorts) {
+            port.postMessage({
+              type: 'SCREENSHOT_CAPTURED',
+              dataUrl,
+              region: message.region,
+            });
+          }
+          sendResponse({ success: true });
+        })
+        .catch((error) => {
+          sendResponse({ success: false, error: (error as Error).message });
+        });
+      return true;
+    }
+
+    if (message.type === 'SIDEPANEL_REGION_CANCELLED') {
+      sendResponse({ success: true });
+      return true;
+    }
+
     handleOneShotMessage(message as ExtensionMessage, sender, sendResponse);
     return true; // async response
   });
@@ -477,6 +522,23 @@ function handleOneShotMessage(
         console.warn('Failed to delete recording:', error);
         sendResponse({ success: false, error: (error as Error).message });
       });
+      break;
+    }
+
+    case 'CAPTURE_SCREENSHOT': {
+      // Capture screenshot for side panel (uses provided tabId or sender's tab)
+      const targetTabId = message.tabId || _sender.tab?.id;
+      if (!targetTabId) {
+        sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: 'No tab ID' });
+        break;
+      }
+      chrome.tabs.captureVisibleTab({ format: 'png', quality: 100 })
+        .then((dataUrl) => {
+          sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl });
+        })
+        .catch((error) => {
+          sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: (error as Error).message });
+        });
       break;
     }
   }

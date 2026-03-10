@@ -5,6 +5,7 @@ import { VisibilityProvider } from './widget/contexts/VisibilityContext';
 import widgetCSS from './widget/styles/widget.css?inline';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { initDevTools } from './widget/dev-tools';
+import { initSidePanelBridge } from './sidepanel-bridge';
 
 /** Delay before retrying widget injection when DOM body is not ready */
 const DOM_READY_RETRY_DELAY_MS = 10;
@@ -72,12 +73,14 @@ async function initializeWidget() {
     return;
   }
 
-  // Check if widget should be visible before mounting
+  // Check display mode and widget visibility before mounting
   try {
-    const result = await chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE);
+    const result = await chrome.storage.local.get([STORAGE_KEYS.WIDGET_VISIBLE, STORAGE_KEYS.DISPLAY_MODE]);
+    const displayMode = result[STORAGE_KEYS.DISPLAY_MODE] ?? 'widget';
     const visible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
 
-    if (visible) {
+    // Only mount widget if in widget mode AND visible
+    if (displayMode === 'widget' && visible) {
       mountWidget();
     }
   } catch (error) {
@@ -86,14 +89,24 @@ async function initializeWidget() {
     return;
   }
 
-  // Listen for visibility changes to mount/unmount
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && STORAGE_KEYS.WIDGET_VISIBLE in changes) {
-      const newVisible = changes[STORAGE_KEYS.WIDGET_VISIBLE].newValue ?? true;
-      if (newVisible) {
-        mountWidget();
-      } else {
-        unmountWidget();
+  // Listen for visibility and display mode changes
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area === 'local') {
+      const displayModeChanged = STORAGE_KEYS.DISPLAY_MODE in changes;
+      const visibilityChanged = STORAGE_KEYS.WIDGET_VISIBLE in changes;
+
+      if (displayModeChanged || visibilityChanged) {
+        // Re-read current state
+        const result = await chrome.storage.local.get([STORAGE_KEYS.WIDGET_VISIBLE, STORAGE_KEYS.DISPLAY_MODE]);
+        const displayMode = result[STORAGE_KEYS.DISPLAY_MODE] ?? 'widget';
+        const visible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
+
+        // Only show widget if in widget mode AND visible
+        if (displayMode === 'widget' && visible) {
+          mountWidget();
+        } else {
+          unmountWidget();
+        }
       }
     }
   });
@@ -109,6 +122,9 @@ if (document.readyState === 'loading') {
 } else {
   initializeWidget();
 }
+
+// Initialize side panel bridge (for element picking when in panel mode)
+initSidePanelBridge();
 
 // Initialize dev tools (development only)
 initDevTools();

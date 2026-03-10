@@ -16,7 +16,12 @@ export const STORAGE_KEYS = {
   TITLE_PREFIX: 'titlePrefix',
   // Jira submit options (assignee, priority)
   JIRA_SUBMIT_OPTIONS: 'jiraSubmitOptions',
+  // Display mode: 'widget' (floating) or 'panel' (side panel)
+  DISPLAY_MODE: 'displayMode',
 } as const;
+
+// Display mode types
+export type DisplayMode = 'widget' | 'panel';
 
 // Jira defaults
 export const TICKET_PREFIX = '[BugShot]';

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { STORAGE_KEYS } from "@/shared/constants";
+import { STORAGE_KEYS, type DisplayMode } from "@/shared/constants";
 import type { EpicConfig } from "@/shared/types/jira-ticket";
 import { cn } from "@/shared/utils/cn";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { ChevronDown, Check, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, Check, Eye, EyeOff, PanelRight, Layers } from "lucide-react";
 
 interface JiraProject {
   id: string;
@@ -774,6 +774,7 @@ export function SettingsPanel() {
   >([]);
   const [titlePrefix, setTitlePrefix] = useState("[BugShot]");
   const [prefixSaved, setPrefixSaved] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("widget");
 
   useEffect(() => {
     chrome.storage.local.get(STORAGE_KEYS.RECENT_SUBMISSIONS, (result) => {
@@ -783,6 +784,10 @@ export function SettingsPanel() {
     chrome.storage.sync.get(STORAGE_KEYS.TITLE_PREFIX, (result) => {
       if (result[STORAGE_KEYS.TITLE_PREFIX] !== undefined)
         setTitlePrefix(result[STORAGE_KEYS.TITLE_PREFIX]);
+    });
+    chrome.storage.local.get(STORAGE_KEYS.DISPLAY_MODE, (result) => {
+      if (result[STORAGE_KEYS.DISPLAY_MODE])
+        setDisplayMode(result[STORAGE_KEYS.DISPLAY_MODE]);
     });
   }, []);
 
@@ -796,12 +801,54 @@ export function SettingsPanel() {
     );
   }, [titlePrefix]);
 
+  const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
+    setDisplayMode(mode);
+    chrome.storage.local.set({ [STORAGE_KEYS.DISPLAY_MODE]: mode });
+  }, []);
+
   return (
     <div className="py-1">
       <section className="px-4 py-3 border-b border-slate-100">
         <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">
           General
         </h3>
+
+        {/* Display Mode Toggle */}
+        <div className="mb-3">
+          <Label>Display Mode</Label>
+          <div className="flex gap-2 mt-1">
+            <button
+              onClick={() => handleDisplayModeChange("widget")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors",
+                displayMode === "widget"
+                  ? "bg-violet-50 border-violet-200 text-violet-700"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <Layers className="w-4 h-4" />
+              Widget
+            </button>
+            <button
+              onClick={() => handleDisplayModeChange("panel")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors",
+                displayMode === "panel"
+                  ? "bg-violet-50 border-violet-200 text-violet-700"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <PanelRight className="w-4 h-4" />
+              Side Panel
+            </button>
+          </div>
+          <div className="text-[11px] text-gray-400 mt-1.5">
+            {displayMode === "widget"
+              ? "Floating widget on page (current)"
+              : "Browser side panel - click extension icon to open"}
+          </div>
+        </div>
+
         <div className="mb-2.5">
           <Label>Title Prefix</Label>
           <div className="flex gap-2">

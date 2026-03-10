@@ -3,8 +3,8 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'BugShot',
-  version: '1.1.0',
-  description: 'Capture bugs and design issues, submit to Jira, GitHub, and N8N with screenshots',
+  version: '1.2.0',
+  description: 'Capture bugs and design issues, submit to Jira, GitHub, and Webhook with screenshots',
 
   icons: {
     '16': 'src/assets/icons/icon-16.png',
@@ -33,12 +33,17 @@ export default defineManifest({
     },
   },
 
+  side_panel: {
+    default_path: 'src/sidepanel/sidepanel.html',
+  },
+
   permissions: [
     'tabs',
     'storage',
     'offscreen',
     'alarms',
     'debugger',
+    'sidePanel',
   ],
 
   host_permissions: [

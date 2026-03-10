@@ -1,7 +1,7 @@
 import { initializeMessagingHub, cleanupCDPSession } from './messaging/hub';
 import './recording/manager'; // Registers alarm listener for keepalive
 import { getRecordingStatus, abortRecording } from './recording/manager';
-import { STORAGE_KEYS } from '@/shared/constants';
+import { STORAGE_KEYS, type DisplayMode } from '@/shared/constants';
 
 initializeMessagingHub();
 
@@ -95,12 +95,25 @@ chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
   updateIcon(visible);
 });
 
-// Toggle widget visibility when extension icon is clicked
-chrome.action.onClicked.addListener(async () => {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE);
-  const currentVisible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
-  const newVisible = !currentVisible;
+// Handle extension icon click based on display mode
+chrome.action.onClicked.addListener(async (tab) => {
+  const result = await chrome.storage.local.get([STORAGE_KEYS.DISPLAY_MODE, STORAGE_KEYS.WIDGET_VISIBLE]);
+  const displayMode: DisplayMode = result[STORAGE_KEYS.DISPLAY_MODE] ?? 'widget';
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.WIDGET_VISIBLE]: newVisible });
-  updateIcon(newVisible);
+  if (displayMode === 'panel') {
+    // Open side panel for the current tab
+    if (tab.id) {
+      try {
+        await chrome.sidePanel.open({ tabId: tab.id });
+      } catch (error) {
+        console.warn('[BugShot] Failed to open side panel:', error);
+      }
+    }
+  } else {
+    // Toggle widget visibility (original behavior)
+    const currentVisible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
+    const newVisible = !currentVisible;
+    await chrome.storage.local.set({ [STORAGE_KEYS.WIDGET_VISIBLE]: newVisible });
+    updateIcon(newVisible);
+  }
 });
