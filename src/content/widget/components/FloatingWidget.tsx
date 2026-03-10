@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/shared/utils/cn";
+import { STORAGE_KEYS } from "@/shared/constants";
 import {
   MousePointer,
   Camera,
@@ -18,6 +19,13 @@ import {
   FileText,
   Crop,
 } from "lucide-react";
+
+interface WidgetLayout {
+  barPos: { left: number; bottom: number };
+  panelPos: { right: number; top: number };
+  panelW: number;
+  panelH: number;
+}
 
 export type ToolbarTab = "changes" | "settings" | null;
 
@@ -73,9 +81,57 @@ export function FloatingWidget({
   const [panelW, setPanelW] = useState(DEFAULT_W);
   const [panelH, setPanelH] = useState(PANEL_H);
   const [panelFlash, setPanelFlash] = useState(false);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
   const isDragging = useRef<"bar" | "panel" | false>(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const isPanelOpen = activeTab !== null;
+
+  // ── Load saved layout on mount ──
+  useEffect(() => {
+    chrome.storage.local.get(STORAGE_KEYS.WIDGET_LAYOUT).then((result) => {
+      const saved = result[STORAGE_KEYS.WIDGET_LAYOUT] as WidgetLayout | undefined;
+      if (saved) {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // Restore positions, but clamp to current viewport
+        setBarPos({
+          left: Math.max(0, Math.min(vw - 300, saved.barPos.left)),
+          bottom: Math.max(0, Math.min(vh - 50, saved.barPos.bottom)),
+        });
+        setPanelPos({
+          right: Math.max(0, Math.min(vw - MIN_W, saved.panelPos.right)),
+          top: Math.max(0, Math.min(vh - 100, saved.panelPos.top)),
+        });
+        setPanelW(Math.max(MIN_W, Math.min(vw - 24, saved.panelW)));
+        setPanelH(Math.max(300, Math.min(vh - 24, saved.panelH)));
+      }
+      setLayoutLoaded(true);
+    }).catch(() => {
+      setLayoutLoaded(true);
+    });
+  }, []);
+
+  // ── Save layout when it changes (debounced) ──
+  const saveTimeoutRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!layoutLoaded) return; // Don't save until initial load completes
+
+    if (saveTimeoutRef.current !== null) {
+      window.clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = window.setTimeout(() => {
+      const layout: WidgetLayout = { barPos, panelPos, panelW, panelH };
+      chrome.storage.local.set({ [STORAGE_KEYS.WIDGET_LAYOUT]: layout }).catch(() => {
+        // Ignore storage errors
+      });
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [barPos, panelPos, panelW, panelH, layoutLoaded]);
 
   // Flash panel when toolbar action is blocked in preview mode
   const flashPanel = useCallback(() => {
@@ -173,6 +229,33 @@ export function FloatingWidget({
       }
     };
   }, [isActiveDrag]);
+
+  // ── Keep toolbar and panel inside viewport on resize ──
+  useEffect(() => {
+    const handleResize = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      // Toolbar: assume ~300px width, keep inside viewport
+      setBarPos((prev) => ({
+        left: Math.max(0, Math.min(vw - 300, prev.left)),
+        bottom: Math.max(0, Math.min(vh - 50, prev.bottom)),
+      }));
+
+      // Panel: keep inside viewport
+      setPanelPos((prev) => ({
+        right: Math.max(0, Math.min(vw - MIN_W, prev.right)),
+        top: Math.max(0, Math.min(vh - 100, prev.top)),
+      }));
+
+      // Also constrain panel size to viewport
+      setPanelW((prev) => Math.min(prev, vw - 24));
+      setPanelH((prev) => Math.min(prev, vh - 24));
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // ── Panel resize (bottom-left corner) ──
   const handleResizeDown = useCallback(

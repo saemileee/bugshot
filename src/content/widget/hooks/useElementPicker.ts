@@ -80,7 +80,7 @@ export function useElementPicker() {
         hl.style.height = rect.height + 'px';
       }
 
-      // Update label
+      // Update label with tag name and dimensions
       const label = document.getElementById('bugshot-picker-label');
       if (label) {
         let tag = target.tagName.toLowerCase();
@@ -89,7 +89,10 @@ export function useElementPicker() {
           const cls = target.className.trim().split(/\s+/).slice(0, 2).join('.');
           if (cls) tag += '.' + cls;
         }
-        label.textContent = tag;
+        // Add dimensions
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        label.innerHTML = `<span style="opacity:0.6">${tag}</span> <span style="color:#60a5fa">${w} × ${h}</span>`;
         label.style.display = 'block';
         label.style.top = Math.max(0, rect.top - 22) + 'px';
         label.style.left = rect.left + 'px';

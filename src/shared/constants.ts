@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   INTEGRATIONS: 'integrations',
   // Widget visibility toggle
   WIDGET_VISIBLE: 'widgetVisible',
+  // Widget layout (panel size/position, toolbar position)
+  WIDGET_LAYOUT: 'widgetLayout',
   // Title prefix
   TITLE_PREFIX: 'titlePrefix',
   // Jira submit options (assignee, priority)
