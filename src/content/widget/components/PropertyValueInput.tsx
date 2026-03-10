@@ -214,6 +214,9 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
 
   // ── Number stepper via keyboard ──
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Prevent host page from intercepting keystrokes (e.g., GitHub's "/" shortcut)
+    e.stopPropagation();
+
     if (e.key === 'Enter') {
       (e.target as HTMLInputElement).blur();
       return;

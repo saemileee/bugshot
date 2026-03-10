@@ -580,6 +580,7 @@ export function SubmitPanel({
             type="text"
             value={editSummary}
             onChange={(e) => setEditSummary(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
             spellCheck={false}
           />
         </div>

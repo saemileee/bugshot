@@ -407,6 +407,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
           className="flex-1 font-mono text-[11px] border-none outline-none bg-transparent text-slate-800 px-1 py-0.5 rounded min-w-0 focus:bg-white focus:shadow-[0_0_0_1px_#93c5fd]"
           value={className}
           onChange={(e) => handleClassNameChange(e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()}
           placeholder="(no class)"
           spellCheck={false}
         />
@@ -421,6 +422,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
             className="flex-1 font-mono text-[11px] border-none outline-none bg-transparent text-slate-800 px-1 py-0.5 rounded min-w-0 focus:bg-white focus:shadow-[0_0_0_1px_#93c5fd]"
             value={textContent}
             onChange={(e) => handleTextContentChange(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
             spellCheck={false}
           />
         </div>

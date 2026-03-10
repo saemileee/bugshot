@@ -83,6 +83,9 @@ export function SearchableSelect({
   }, [onChange]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Prevent host page from intercepting keystrokes (e.g., GitHub's "/" shortcut)
+    e.stopPropagation();
+
     if (e.key === 'Escape') {
       handleClose();
     } else if (e.key === 'ArrowDown') {

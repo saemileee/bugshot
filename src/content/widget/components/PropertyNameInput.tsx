@@ -132,6 +132,9 @@ export function PropertyNameInput({ value, onChange, onSelect, onEscape }: Prope
   }, [highlightedIndex, isOpen]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Prevent host page from intercepting keystrokes (e.g., GitHub's "/" shortcut)
+    e.stopPropagation();
+
     if (e.key === 'Escape') {
       e.preventDefault();
       onEscape();

@@ -282,6 +282,7 @@ export function InlineScreenshotEditor({
           placeholder="Add a description for this screenshot..."
           value={description}
           onChange={handleDescriptionChange}
+          onKeyDown={(e) => e.stopPropagation()}
         />
       </div>
     </div>
