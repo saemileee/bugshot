@@ -1,14 +1,15 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Settings, Camera, Video, MousePointer2, Square, X, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Settings, Camera, Video, MousePointer2, Square, X, ArrowRight, ArrowLeft, Layers } from 'lucide-react';
 import { SettingsPanel } from '@/content/widget/components/SettingsPanel';
 import { ChangesSummary } from '@/content/widget/components/ChangesSummary';
 import { ManualDescription } from '@/content/widget/components/ManualDescription';
 import { InlineScreenshotEditor } from '@/content/widget/components/InlineScreenshotEditor';
 import { SubmitPanel } from '@/content/widget/components/SubmitPanel';
 import { Button } from '@/content/widget/components/ui/button';
+import { StyleEditor } from '@/content/widget/components/StyleEditor';
 import { useSWMessaging } from '@/content/widget/hooks/useSWMessaging';
 import { STORAGE_KEYS } from '@/shared/constants';
-import type { ExtensionMessage } from '@/shared/types/messages';
+import type { ExtensionMessage, CDPStyleResult } from '@/shared/types/messages';
 import type { CSSChange } from '@/shared/types/css-change';
 
 type Tab = 'capture' | 'settings';
@@ -23,6 +24,11 @@ interface ScreenshotData {
 interface PendingElement {
   selector: string;
   screenshotBefore?: string;
+  className: string;
+  textContent: string;
+  cdpStyles: CDPStyleResult | null;
+  computedStyles: Array<{ name: string; value: string }>;
+  pageTokens: Array<{ name: string; value: string }>;
 }
 
 export function SidePanelRoot() {
@@ -93,14 +99,23 @@ export function SidePanelRoot() {
     }
     // Handle messages from content script (via side panel bridge)
     if (msg.type === 'ELEMENT_PICKED') {
+      console.log('[SidePanel] ELEMENT_PICKED received:', msg);
       setIsPicking(false);
       if ('cssChange' in msg && msg.cssChange) {
         const change = msg.cssChange as Partial<CSSChange>;
-        // Enter editing mode instead of immediately adding the change
-        setPendingElement({
+        const elementData = {
           selector: change.selector || 'element',
-          screenshotBefore: undefined, // Will be captured separately
-        });
+          screenshotBefore: undefined,
+          className: (msg as any).className || '',
+          textContent: (msg as any).textContent || '',
+          cdpStyles: (msg as any).cdpStyles || null,
+          computedStyles: (msg as any).computedStyles || [],
+          pageTokens: (msg as any).pageTokens || [],
+        };
+        console.log('[SidePanel] Setting pendingElement:', elementData);
+        setPendingElement(elementData);
+      } else {
+        console.warn('[SidePanel] ELEMENT_PICKED missing cssChange:', msg);
       }
     }
     if (msg.type === 'PICKING_CANCELLED') {
@@ -121,18 +136,24 @@ export function SidePanelRoot() {
   // Get current tab ID
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      console.log('[SidePanel] Tab query result:', tabs);
       if (tabs[0]?.id) {
+        console.log('[SidePanel] Setting currentTabId:', tabs[0].id);
         setCurrentTabId(tabs[0].id);
+      } else {
+        console.warn('[SidePanel] No active tab found');
       }
     });
 
     // Listen for tab changes
     const handleActivated = (activeInfo: chrome.tabs.TabActiveInfo) => {
+      console.log('[SidePanel] Tab activated:', activeInfo.tabId);
       setCurrentTabId(activeInfo.tabId);
     };
     chrome.tabs.onActivated.addListener(handleActivated);
     return () => chrome.tabs.onActivated.removeListener(handleActivated);
   }, []);
+
 
   // Check platform connection status
   const checkPlatformStatus = useCallback(async () => {
@@ -180,15 +201,35 @@ export function SidePanelRoot() {
     });
   }, []);
 
-  // Send message to content script
-  const sendToContentScript = useCallback(async (message: any) => {
-    if (!currentTabId) return;
-    try {
-      await chrome.tabs.sendMessage(currentTabId, message);
-    } catch (error) {
-      console.warn('[SidePanel] Failed to send message to content script:', error);
+  // Send message to content script via tabs.sendMessage
+  const sendToContentScript = useCallback((message: any) => {
+    console.log('[SidePanel] sendToContentScript called:', message.type, 'currentTabId:', currentTabId);
+    if (currentTabId) {
+      chrome.tabs.sendMessage(currentTabId, message)
+        .then(() => {
+          console.log('[SidePanel] Message sent successfully');
+        })
+        .catch((error) => {
+          console.warn('[SidePanel] Failed to send message to content script:', error);
+        });
+    } else {
+      console.warn('[SidePanel] Cannot send message: no tabId');
     }
   }, [currentTabId]);
+
+  // Switch to widget mode
+  const handleSwitchToWidget = useCallback(async () => {
+    try {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.DISPLAY_MODE]: 'widget',
+        [STORAGE_KEYS.WIDGET_VISIBLE]: true,
+      });
+      // Close side panel
+      window.close();
+    } catch (error) {
+      console.warn('[SidePanel] Failed to switch to widget mode:', error);
+    }
+  }, []);
 
   // Actions
   const handlePickElement = useCallback(() => {
@@ -428,17 +469,26 @@ export function SidePanelRoot() {
           <img src={chrome.runtime.getURL('src/assets/icons/icon-32.png')} alt="BugShot" className="w-6 h-6" />
           <span className="font-semibold text-slate-800">BugShot</span>
         </div>
-        <button
-          onClick={() => setActiveTab(activeTab === 'settings' ? 'capture' : 'settings')}
-          className={`p-2 rounded-lg transition-colors ${
-            activeTab === 'settings'
-              ? 'bg-violet-100 text-violet-600'
-              : 'text-slate-500 hover:bg-slate-100'
-          }`}
-          title="Settings"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleSwitchToWidget}
+            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+            title="Switch to Widget Mode"
+          >
+            <Layers className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setActiveTab(activeTab === 'settings' ? 'capture' : 'settings')}
+            className={`p-2 rounded-lg transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-violet-100 text-violet-600'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* Toolbar */}
@@ -573,6 +623,27 @@ export function SidePanelRoot() {
                   </code>
                 </div>
               </div>
+            )}
+
+            {/* Style Editor - shows when element is picked */}
+            {isEditing && pendingElement && (
+              <StyleEditor
+                remoteMode
+                selector={pendingElement.selector}
+                initialClassName={pendingElement.className}
+                initialTextContent={pendingElement.textContent}
+                initialCdpStyles={pendingElement.cdpStyles}
+                initialComputedStyles={pendingElement.computedStyles}
+                pageTokens={pendingElement.pageTokens}
+                onRemoteChange={(change) => {
+                  // Send style change to content script
+                  sendToContentScript({
+                    type: 'APPLY_STYLE_CHANGE',
+                    selector: pendingElement.selector,
+                    change,
+                  });
+                }}
+              />
             )}
 
             {/* CSS Changes */}

@@ -5,11 +5,16 @@
  */
 
 import type { CSSChange } from '@/shared/types/css-change';
+import type { CDPStyleResult } from '@/shared/types/messages';
+
+// Direct port connection from side panel (CSS Peeper pattern)
+let sidePanelPort: chrome.runtime.Port | null = null;
 
 let isPickingForPanel = false;
 let pickingOverlay: HTMLDivElement | null = null;
 let highlightOverlay: HTMLDivElement | null = null;
 let infoPanel: HTMLDivElement | null = null;
+let currentPickedElement: Element | null = null;
 
 function createOverlays() {
   // Main picking overlay (captures clicks)
@@ -130,6 +135,18 @@ function getElementAtPoint(x: number, y: number): Element | null {
   return element;
 }
 
+function escapeCSSIdentifier(str: string): string {
+  return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
+}
+
+function isSafeClassName(className: string): boolean {
+  if (className.includes('[')) return false;
+  if (className.includes('(')) return false;
+  if (className.length > 40) return false;
+  if (/^[!@#$%^&*()+=]/.test(className)) return false;
+  return true;
+}
+
 function generateSelector(element: Element): string {
   const tagName = element.tagName.toLowerCase();
 
@@ -148,24 +165,190 @@ function generateSelector(element: Element): string {
   return tagName;
 }
 
-function captureElementInfo(element: Element): Partial<CSSChange> {
+// Build a more specific selector for CDP
+function buildCDPSelector(el: Element): string {
+  if (el === document.documentElement) return 'html';
+  if (el === document.body) return 'body';
+
+  const parts: string[] = [];
+  let current: Element | null = el;
+
+  while (current && current !== document.body && parts.length < 5) {
+    let s = current.tagName.toLowerCase();
+    if (current.id) {
+      parts.unshift('#' + escapeCSSIdentifier(current.id));
+      break;
+    }
+    if (current.className && typeof current.className === 'string') {
+      const safeClasses = current.className
+        .trim()
+        .split(/\s+/)
+        .filter(isSafeClassName)
+        .slice(0, 2)
+        .map(escapeCSSIdentifier)
+        .join('.');
+      if (safeClasses) s += '.' + safeClasses;
+    }
+    parts.unshift(s);
+    current = current.parentElement;
+  }
+
+  return parts.length > 0 ? parts.join(' > ') : el.tagName.toLowerCase();
+}
+
+// Fetch styles via CDP
+async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: 'GET_ELEMENT_STYLES', selector },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[SidePanelBridge] CDP request failed:', chrome.runtime.lastError.message);
+          resolve(null);
+          return;
+        }
+        if (response?.success && response.styles) {
+          resolve(response.styles as CDPStyleResult);
+        } else {
+          console.warn('[SidePanelBridge] CDP fetch failed:', response?.error);
+          resolve(null);
+        }
+      }
+    );
+  });
+}
+
+// Collect CSS custom properties (tokens) from the page
+function collectPageTokens(): Array<{ name: string; value: string }> {
+  const tokens = new Map<string, string>();
+
+  function extractFromRules(rules: CSSRuleList) {
+    for (let r = 0; r < rules.length; r++) {
+      const rule = rules[r];
+      try {
+        if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
+          extractFromRules((rule as CSSGroupingRule).cssRules);
+        }
+      } catch { /* can't access nested rules */ }
+
+      if (!(rule instanceof CSSStyleRule)) continue;
+
+      for (let p = 0; p < rule.style.length; p++) {
+        const prop = rule.style.item(p);
+        if (prop.startsWith('--')) {
+          tokens.set(prop, rule.style.getPropertyValue(prop).trim());
+        }
+      }
+    }
+  }
+
+  // Collect from all stylesheets
+  for (let s = 0; s < document.styleSheets.length; s++) {
+    let rules: CSSRuleList;
+    try { rules = document.styleSheets[s].cssRules; } catch { continue; }
+    try { extractFromRules(rules); } catch { /* skip */ }
+  }
+
+  // Also collect resolved values from :root via getComputedStyle
+  const rootStyle = getComputedStyle(document.documentElement);
+  for (const [name] of tokens) {
+    const resolved = rootStyle.getPropertyValue(name).trim();
+    if (resolved) tokens.set(name, resolved);
+  }
+
+  // Collect from inline style of documentElement
+  const root = document.documentElement;
+  for (let i = 0; i < root.style.length; i++) {
+    const prop = root.style.item(i);
+    if (prop.startsWith('--')) {
+      tokens.set(prop, root.style.getPropertyValue(prop).trim());
+    }
+  }
+
+  return Array.from(tokens.entries()).map(([name, value]) => ({ name, value }));
+}
+
+// Get computed styles as fallback
+function getComputedStylesSimple(element: Element): Array<{ name: string; value: string }> {
+  const computed = window.getComputedStyle(element);
+  const important = [
+    'display', 'position', 'width', 'height', 'padding', 'margin',
+    'background-color', 'color', 'font-size', 'font-weight', 'border',
+    'border-radius', 'flex', 'grid', 'gap', 'opacity', 'z-index'
+  ];
+
+  const styles: Array<{ name: string; value: string }> = [];
+  for (const prop of important) {
+    const value = computed.getPropertyValue(prop);
+    if (value && value !== 'none' && value !== 'normal' && value !== 'auto') {
+      styles.push({ name: prop, value });
+    }
+  }
+  return styles;
+}
+
+interface ElementInfo {
+  cssChange: Partial<CSSChange>;
+  className: string;
+  textContent: string;
+  cdpSelector: string;
+  computedStyles: Array<{ name: string; value: string }>;
+  cdpStyles: CDPStyleResult | null;
+  pageTokens: Array<{ name: string; value: string }>;
+}
+
+async function captureElementInfo(element: Element): Promise<ElementInfo> {
   const selector = generateSelector(element);
+  const cdpSelector = buildCDPSelector(element);
+
+  // Get class name and text content
+  let className = '';
+  if (typeof element.className === 'string') {
+    className = element.className.trim();
+  }
+
+  let textContent = '';
+  for (let i = 0; i < element.childNodes.length; i++) {
+    if (element.childNodes[i].nodeType === Node.TEXT_NODE) {
+      textContent += element.childNodes[i].textContent;
+    }
+  }
+  textContent = textContent.trim();
+
+  // Get computed styles (simple fallback)
+  const computedStyles = getComputedStylesSimple(element);
+
+  // Try to get CDP styles
+  const cdpStyles = await fetchStylesViaCDP(cdpSelector);
+
+  // Collect page tokens (CSS custom properties)
+  const pageTokens = collectPageTokens();
 
   return {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    selector,
-    elementDescription: selector,
-    url: window.location.href,
-    properties: [],
-    status: 'pending',
+    cssChange: {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      selector,
+      elementDescription: selector,
+      url: window.location.href,
+      properties: [],
+      status: 'pending',
+    },
+    className,
+    textContent,
+    cdpSelector,
+    computedStyles,
+    cdpStyles,
+    pageTokens,
   };
 }
 
 function startPicking() {
+  console.log('[SidePanelBridge] startPicking called, isPickingForPanel:', isPickingForPanel);
   if (isPickingForPanel) return;
   isPickingForPanel = true;
 
+  console.log('[SidePanelBridge] Creating overlays');
   createOverlays();
 
   const handleMouseMove = (e: MouseEvent) => {
@@ -175,7 +358,7 @@ function startPicking() {
     }
   };
 
-  const handleClick = (e: MouseEvent) => {
+  const handleClick = async (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -184,24 +367,44 @@ function startPicking() {
     cleanup();
 
     if (element) {
-      const cssChange = captureElementInfo(element);
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_ELEMENT_PICKED',
-        cssChange,
+      // Save reference to picked element for later style changes
+      currentPickedElement = element;
+
+      const elementInfo = await captureElementInfo(element);
+      console.log('[SidePanelBridge] Element captured:', {
+        selector: elementInfo.cssChange?.selector,
+        hasClassName: !!elementInfo.className,
+        hasCdpStyles: !!elementInfo.cdpStyles,
+        computedStylesCount: elementInfo.computedStyles?.length,
       });
+      // Send via direct port if available, fallback to runtime.sendMessage
+      const message = { type: 'ELEMENT_PICKED', ...elementInfo };
+      if (sidePanelPort) {
+        console.log('[SidePanelBridge] Sending via direct port');
+        sidePanelPort.postMessage(message);
+      } else {
+        console.log('[SidePanelBridge] Sending via service worker relay');
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_ELEMENT_PICKED', ...elementInfo });
+      }
     } else {
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_PICKING_CANCELLED',
-      });
+      const message = { type: 'PICKING_CANCELLED' };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_PICKING_CANCELLED' });
+      }
     }
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       cleanup();
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_PICKING_CANCELLED',
-      });
+      const message = { type: 'PICKING_CANCELLED' };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_PICKING_CANCELLED' });
+      }
     }
   };
 
@@ -222,6 +425,43 @@ function cancelPicking() {
   if (!isPickingForPanel) return;
   isPickingForPanel = false;
   removeOverlays();
+}
+
+// Apply style changes from side panel
+function applyStyleChange(change: { type: 'class' | 'text' | 'style'; property?: string; value: string }) {
+  if (!currentPickedElement) {
+    console.warn('[SidePanelBridge] No element selected for style change');
+    return false;
+  }
+
+  const el = currentPickedElement as HTMLElement;
+
+  switch (change.type) {
+    case 'class':
+      el.className = change.value;
+      console.log('[SidePanelBridge] Applied class change:', change.value);
+      break;
+    case 'text':
+      // Find first text node and update it
+      for (let i = 0; i < el.childNodes.length; i++) {
+        if (el.childNodes[i].nodeType === Node.TEXT_NODE) {
+          el.childNodes[i].textContent = change.value;
+          console.log('[SidePanelBridge] Applied text change:', change.value);
+          return true;
+        }
+      }
+      // No text node found, insert one
+      el.insertBefore(document.createTextNode(change.value), el.firstChild);
+      console.log('[SidePanelBridge] Inserted text node:', change.value);
+      break;
+    case 'style':
+      if (change.property) {
+        el.style.setProperty(change.property, change.value);
+        console.log('[SidePanelBridge] Applied style change:', change.property, '=', change.value);
+      }
+      break;
+  }
+  return true;
 }
 
 // Region selection for side panel
@@ -298,23 +538,31 @@ function startRegionSelect() {
     cleanup();
 
     if (width > 10 && height > 10) {
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_REGION_SELECTED',
-        region: { x, y, width, height },
-      });
+      const message = { type: 'REGION_SELECTED', region: { x, y, width, height } };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_REGION_SELECTED', region: { x, y, width, height } });
+      }
     } else {
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_REGION_CANCELLED',
-      });
+      const message = { type: 'REGION_CANCELLED' };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_REGION_CANCELLED' });
+      }
     }
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       cleanup();
-      chrome.runtime.sendMessage({
-        type: 'SIDEPANEL_REGION_CANCELLED',
-      });
+      const message = { type: 'REGION_CANCELLED' };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_REGION_CANCELLED' });
+      }
     }
   };
 
@@ -338,10 +586,45 @@ function startRegionSelect() {
 }
 
 export function initSidePanelBridge() {
-  // Listen for messages from side panel (via service worker)
+  console.log('[SidePanelBridge] Initializing side panel bridge...');
+
+  // Listen for direct port connections from side panel (CSS Peeper pattern)
+  chrome.runtime.onConnect.addListener((port) => {
+    console.log('[SidePanelBridge] onConnect received:', port.name);
+    // Check if this is a side panel connection
+    if (port.name.startsWith('sidepanel_')) {
+      console.log('[SidePanelBridge] Side panel connected:', port.name);
+      sidePanelPort = port;
+
+      port.onMessage.addListener((message) => {
+        switch (message.type) {
+          case 'START_PICKING':
+            startPicking();
+            break;
+          case 'CANCEL_PICKING':
+            cancelPicking();
+            break;
+          case 'START_REGION_SELECT':
+            startRegionSelect();
+            break;
+        }
+      });
+
+      port.onDisconnect.addListener(() => {
+        console.log('[SidePanelBridge] Side panel disconnected');
+        sidePanelPort = null;
+        // Cancel any ongoing picking when side panel disconnects
+        cancelPicking();
+      });
+    }
+  });
+
+  // Also listen for messages via service worker (fallback for older approach)
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    console.log('[SidePanelBridge] onMessage received:', message.type);
     switch (message.type) {
       case 'START_PICKING':
+        console.log('[SidePanelBridge] Starting pick mode');
         startPicking();
         sendResponse({ success: true });
         break;
@@ -354,6 +637,15 @@ export function initSidePanelBridge() {
       case 'START_REGION_SELECT':
         startRegionSelect();
         sendResponse({ success: true });
+        break;
+
+      case 'APPLY_STYLE_CHANGE':
+        if (message.change) {
+          const success = applyStyleChange(message.change);
+          sendResponse({ success });
+        } else {
+          sendResponse({ success: false, error: 'No change data provided' });
+        }
         break;
 
       default:

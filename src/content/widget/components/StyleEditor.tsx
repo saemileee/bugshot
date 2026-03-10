@@ -6,7 +6,16 @@ import type { CDPStyleResult } from '@/shared/types/messages';
 import { cn } from '@/shared/utils/cn';
 
 interface StyleEditorProps {
-  element: Element;
+  element?: Element;
+  // Remote mode props (for side panel)
+  remoteMode?: boolean;
+  selector?: string;
+  initialClassName?: string;
+  initialTextContent?: string;
+  initialCdpStyles?: CDPStyleResult | null;
+  initialComputedStyles?: Array<{ name: string; value: string }>;
+  pageTokens?: Array<{ name: string; value: string }>;
+  onRemoteChange?: (change: { type: 'class' | 'text' | 'style'; property?: string; value: string }) => void;
 }
 
 /* ── Selector builder for CDP ── */
@@ -276,7 +285,17 @@ interface StyleRuleBlock {
 
 /* ── Component ── */
 
-export function StyleEditor({ element }: StyleEditorProps) {
+export function StyleEditor({
+  element,
+  remoteMode = false,
+  selector: remoteSelector,
+  initialClassName = '',
+  initialTextContent = '',
+  initialCdpStyles,
+  initialComputedStyles,
+  pageTokens,
+  onRemoteChange,
+}: StyleEditorProps) {
   const [className, setClassName] = useState('');
   const [textContent, setTextContent] = useState('');
   const [blocks, setBlocks] = useState<StyleRuleBlock[]>([]);
@@ -284,14 +303,76 @@ export function StyleEditor({ element }: StyleEditorProps) {
   const [newPropName, setNewPropName] = useState('');
   const [newPropValue, setNewPropValue] = useState('');
   const [cdpError, setCdpError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!remoteMode);
   const htmlEl = useRef<HTMLElement | null>(null);
   const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
 
   // Generate selector from element directly to avoid timing issues
-  const selector = useMemo(() => buildSelectorForElement(element), [element]);
+  const selector = useMemo(() => {
+    if (remoteMode) return remoteSelector || '';
+    return element ? buildSelectorForElement(element) : '';
+  }, [element, remoteMode, remoteSelector]);
 
+  // Initialize from remote data (side panel mode)
   useEffect(() => {
+    if (!remoteMode) return;
+
+    console.log('[StyleEditor] Remote mode init:', {
+      initialClassName,
+      initialTextContent,
+      hasCdpStyles: !!initialCdpStyles,
+      cdpStylesKeys: initialCdpStyles ? Object.keys(initialCdpStyles) : [],
+      computedStylesCount: initialComputedStyles?.length,
+    });
+
+    setClassName(initialClassName);
+    setTextContent(initialTextContent);
+
+    if (initialCdpStyles) {
+      const cdpBlocks = convertCDPToBlocks(initialCdpStyles);
+      console.log('[StyleEditor] CDP blocks created:', cdpBlocks.length);
+      setBlocks(cdpBlocks);
+      setIsLoading(false);
+    } else if (initialComputedStyles && initialComputedStyles.length > 0) {
+      console.log('[StyleEditor] Using computed styles fallback');
+      // Fallback to computed styles - create inline block for editing
+      setBlocks([{
+        id: 'inline',
+        selector: 'element.style',
+        source: '',
+        properties: [],
+        isInline: true,
+      }, {
+        id: 'computed',
+        selector: 'Computed Styles',
+        source: '',
+        properties: initialComputedStyles.map(s => ({
+          property: s.name,
+          value: s.value,
+          priority: '',
+          overridden: false,
+        })),
+        isInline: false,
+      }]);
+      setIsLoading(false);
+    } else {
+      console.warn('[StyleEditor] No styles data available');
+      // Create empty inline block so user can still add properties
+      setBlocks([{
+        id: 'inline',
+        selector: 'element.style',
+        source: '',
+        properties: [],
+        isInline: true,
+      }]);
+      setIsLoading(false);
+    }
+  }, [remoteMode, initialClassName, initialTextContent, initialCdpStyles, initialComputedStyles]);
+
+  // Local mode initialization (widget mode)
+  useEffect(() => {
+    if (remoteMode || !element) return;
+
     htmlEl.current = element as HTMLElement;
 
     let cn = element.className;
@@ -335,28 +416,39 @@ export function StyleEditor({ element }: StyleEditorProps) {
     })();
 
     return () => { cancelled = true; };
-  }, [element, selector]);
+  }, [element, selector, remoteMode]);
 
   const handleClassNameChange = useCallback((val: string) => {
+    console.log('[StyleEditor] Class change:', val, 'remoteMode:', remoteMode);
     setClassName(val);
-    if (htmlEl.current) htmlEl.current.className = val;
-  }, []);
+    if (remoteMode) {
+      onRemoteChange?.({ type: 'class', value: val });
+    } else if (htmlEl.current) {
+      htmlEl.current.className = val;
+    }
+  }, [remoteMode, onRemoteChange]);
 
   const handleTextContentChange = useCallback((val: string) => {
     setTextContent(val);
-    if (!htmlEl.current) return;
-    for (let i = 0; i < htmlEl.current.childNodes.length; i++) {
-      if (htmlEl.current.childNodes[i].nodeType === Node.TEXT_NODE) {
-        htmlEl.current.childNodes[i].textContent = val;
-        return;
+    if (remoteMode) {
+      onRemoteChange?.({ type: 'text', value: val });
+    } else if (htmlEl.current) {
+      for (let i = 0; i < htmlEl.current.childNodes.length; i++) {
+        if (htmlEl.current.childNodes[i].nodeType === Node.TEXT_NODE) {
+          htmlEl.current.childNodes[i].textContent = val;
+          return;
+        }
       }
+      htmlEl.current.insertBefore(document.createTextNode(val), htmlEl.current.firstChild);
     }
-    htmlEl.current.insertBefore(document.createTextNode(val), htmlEl.current.firstChild);
-  }, []);
+  }, [remoteMode, onRemoteChange]);
 
   const handleValueChange = useCallback((blockId: string, prop: string, val: string) => {
-    if (!htmlEl.current) return;
-    htmlEl.current.style.setProperty(prop, val);
+    if (remoteMode) {
+      onRemoteChange?.({ type: 'style', property: prop, value: val });
+    } else if (htmlEl.current) {
+      htmlEl.current.style.setProperty(prop, val);
+    }
 
     setBlocks((prev) =>
       prev.map((b) =>
@@ -370,19 +462,23 @@ export function StyleEditor({ element }: StyleEditorProps) {
           : b
       )
     );
-  }, []);
+  }, [remoteMode, onRemoteChange]);
 
   const handleAddProperty = useCallback((submittedValue?: string) => {
     const prop = newPropName.trim();
     const val = (submittedValue ?? newPropValue).trim();
-    if (!prop || !htmlEl.current) return;
+    if (!prop) return;
 
-    htmlEl.current.style.setProperty(prop, val);
+    if (remoteMode) {
+      onRemoteChange?.({ type: 'style', property: prop, value: val });
+    } else if (htmlEl.current) {
+      htmlEl.current.style.setProperty(prop, val);
+    }
 
     setBlocks((prev) => {
       const next = prev.map((b) => ({ ...b, properties: [...b.properties] }));
-      const inlineBlock = next.find((b) => b.isInline)!;
-      if (!inlineBlock.properties.some((p) => p.property === prop)) {
+      const inlineBlock = next.find((b) => b.isInline);
+      if (inlineBlock && !inlineBlock.properties.some((p) => p.property === prop)) {
         inlineBlock.properties.push({
           property: prop, value: val, priority: '', overridden: false,
         });
@@ -393,7 +489,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
     setNewPropName('');
     setNewPropValue('');
     setAddingToBlock(null);
-  }, [newPropName, newPropValue]);
+  }, [newPropName, newPropValue, remoteMode, onRemoteChange]);
 
   const ruleCount = blocks.filter((b) => !b.isInline).length;
 
@@ -481,6 +577,7 @@ export function StyleEditor({ element }: StyleEditorProps) {
                     value={p.value}
                     onChange={(val) => handleValueChange(block.id, p.property, val)}
                     overridden={p.overridden}
+                    externalTokens={remoteMode ? pageTokens : undefined}
                   />
                   {p.priority === 'important' && <span className="text-red-600 text-[10px] ml-0.5 flex-shrink-0">!important</span>}
                   <span className="text-gray-400 flex-shrink-0">;</span>

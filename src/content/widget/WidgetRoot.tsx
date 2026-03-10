@@ -17,7 +17,7 @@ import { useDraftPersistence, clearDraft } from "./hooks/useDraftPersistence";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { CSSChange } from "@/shared/types/css-change";
 import type { ExtensionMessage } from "@/shared/types/messages";
-import { STORAGE_KEYS } from "@/shared/constants";
+import { STORAGE_KEYS, type DisplayMode } from "@/shared/constants";
 
 export type WidgetTab = "capture" | "describe" | "changes" | "submit";
 
@@ -414,6 +414,25 @@ export function WidgetRoot() {
 
   const handleRegionCancel = useCallback(() => {
     setIsSelectingRegion(false);
+  }, []);
+
+  // ── Switch to Side Panel Mode ──
+  const handleSwitchToPanel = useCallback(async () => {
+    try {
+      // Save display mode to storage
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.DISPLAY_MODE]: 'panel' as DisplayMode,
+      });
+
+      // Request service worker to open side panel
+      const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_ID' });
+      if (response?.tabId) {
+        // Service worker will handle opening the side panel
+        // Widget will be hidden via storage change listener in content-script.ts
+      }
+    } catch (error) {
+      console.warn('[WidgetRoot] Failed to switch to panel mode:', error);
+    }
   }, []);
 
   const handleToolbarRecord = useCallback(async () => {
@@ -909,6 +928,7 @@ export function WidgetRoot() {
         onScreenshot={handleToolbarScreenshot}
         onRegionScreenshot={handleToolbarRegionScreenshot}
         onRecordToggle={handleToolbarRecord}
+        onSwitchToPanel={handleSwitchToPanel}
         footer={footerContent}
       >
         {panelContent}

@@ -56,6 +56,7 @@ export function useSWMessaging(onPortMessage?: (msg: ExtensionMessage) => void) 
         if (isMounted) setIsConnected(true);
 
         port.onMessage.addListener((msg: ExtensionMessage) => {
+          console.log('[useSWMessaging] Port message received:', msg.type);
           callbackRef.current?.(msg);
         });
 

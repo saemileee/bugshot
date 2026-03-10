@@ -63,10 +63,10 @@ export type ExtensionMessage =
   // Side Panel Bridge messages (content script <-> side panel via service worker)
   | { type: 'START_PICKING' }
   | { type: 'CANCEL_PICKING' }
-  | { type: 'ELEMENT_PICKED'; cssChange?: Partial<CSSChange> }
+  | { type: 'ELEMENT_PICKED'; cssChange?: Partial<CSSChange>; className?: string; textContent?: string; cdpSelector?: string; computedStyles?: Array<{ name: string; value: string }>; cdpStyles?: CDPStyleResult | null }
   | { type: 'PICKING_CANCELLED' }
   | { type: 'START_REGION_SELECT' }
-  | { type: 'SIDEPANEL_ELEMENT_PICKED'; cssChange: Partial<CSSChange> }
+  | { type: 'SIDEPANEL_ELEMENT_PICKED'; cssChange: Partial<CSSChange>; className: string; textContent: string; cdpSelector: string; computedStyles: Array<{ name: string; value: string }>; cdpStyles: CDPStyleResult | null }
   | { type: 'SIDEPANEL_PICKING_CANCELLED' }
   | { type: 'SIDEPANEL_REGION_SELECTED'; region: { x: number; y: number; width: number; height: number } }
   | { type: 'SIDEPANEL_REGION_CANCELLED' };

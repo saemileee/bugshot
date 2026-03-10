@@ -6,6 +6,8 @@ interface PropertyValueInputProps {
   value: string;
   onChange: (value: string) => void;
   overridden?: boolean;
+  // External tokens (for side panel mode where page DOM is not accessible)
+  externalTokens?: Array<{ name: string; value: string }>;
 }
 
 // ── Color detection ──
@@ -183,7 +185,7 @@ function getSimilarTokens(
 
 // ── Component ──
 
-export function PropertyValueInput({ property, value, onChange, overridden }: PropertyValueInputProps) {
+export function PropertyValueInput({ property, value, onChange, overridden, externalTokens }: PropertyValueInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const [tokenDropdownOpen, setTokenDropdownOpen] = useState(false);
@@ -196,11 +198,20 @@ export function PropertyValueInput({ property, value, onChange, overridden }: Pr
   const numParsed = parseNumericValue(value);
   const varRef = parseVarReference(value);
 
-  // Collect page tokens once (memoized)
+  // Use external tokens if provided (side panel mode), otherwise collect from page
   const pageTokens = useMemo(() => {
     if (!varRef) return new Map<string, string>();
+    // Use external tokens if available
+    if (externalTokens && externalTokens.length > 0) {
+      const tokenMap = new Map<string, string>();
+      for (const t of externalTokens) {
+        tokenMap.set(t.name, t.value);
+      }
+      return tokenMap;
+    }
+    // Fallback to collecting from page (widget mode)
     return collectPageTokens();
-  }, [!!varRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!varRef, externalTokens]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const similarTokens = useMemo(() => {
     if (!varRef) return [];

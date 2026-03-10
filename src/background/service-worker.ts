@@ -95,6 +95,9 @@ chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
   updateIcon(visible);
 });
 
+// Note: sidePanel.open() requires a user gesture, so we cannot auto-open
+// when display mode changes. The user must click the extension icon to open the panel.
+
 // Handle extension icon click based on display mode
 chrome.action.onClicked.addListener(async (tab) => {
   const result = await chrome.storage.local.get([STORAGE_KEYS.DISPLAY_MODE, STORAGE_KEYS.WIDGET_VISIBLE]);

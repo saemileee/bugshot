@@ -29,8 +29,11 @@ import {
   getAllIntegrationStatuses,
 } from '../integrations/registry';
 
-// Port registry keyed by tabId
+// Port registry keyed by tabId (for content scripts)
 const contentPorts = new Map<number, chrome.runtime.Port>();
+
+// Side panel ports (no tabId, registered separately)
+const sidePanelPorts = new Set<chrome.runtime.Port>();
 
 // CDP session cache to reduce attach/detach frequency
 interface CDPSession {
@@ -68,57 +71,78 @@ export function initializeMessagingHub() {
   hubInitialized = true;
 
   chrome.runtime.onConnect.addListener((port) => {
+    console.log('[Hub] onConnect:', port.name, 'sender:', port.sender?.url);
     if (port.name === 'content-widget') {
-      handleContentPort(port);
+      // Check if this is from a tab (content script) or side panel
+      const tabId = port.sender?.tab?.id;
+      console.log('[Hub] content-widget port, tabId:', tabId);
+      if (tabId !== undefined) {
+        handleContentPort(port);
+      } else {
+        // Side panel connection (no tab ID)
+        handleSidePanelPort(port);
+      }
     }
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Route recording completion from offscreen → content port
+    // Helper to broadcast to all ports (content + side panel)
+    const broadcastToAll = (msg: unknown) => {
+      for (const [, port] of contentPorts) {
+        port.postMessage(msg);
+      }
+      for (const port of sidePanelPorts) {
+        port.postMessage(msg);
+      }
+    };
+
+    // Route recording completion from offscreen → all ports
     if (message.type === 'recording-complete' && message.target === 'service-worker') {
-      for (const [, port] of contentPorts) {
-        port.postMessage({
-          type: 'RECORDING_COMPLETE',
-          recordingId: message.recordingId,
-          dataUrl: message.dataUrl,
-          size: message.size,
-          mimeType: message.mimeType,
-        });
-      }
+      broadcastToAll({
+        type: 'RECORDING_COMPLETE',
+        recordingId: message.recordingId,
+        dataUrl: message.dataUrl,
+        size: message.size,
+        mimeType: message.mimeType,
+      });
       return false;
     }
 
-    // Route recording error from offscreen → content port
+    // Route recording error from offscreen → all ports
     if (message.type === 'recording-error' && message.target === 'service-worker') {
-      for (const [, port] of contentPorts) {
-        port.postMessage({
-          type: 'RECORDING_ERROR',
-          error: message.error || 'Recording failed',
-        });
-      }
+      broadcastToAll({
+        type: 'RECORDING_ERROR',
+        error: message.error || 'Recording failed',
+      });
       return false;
     }
 
-    // Route conversion progress from offscreen → content port
+    // Route conversion progress from offscreen → all ports
     if (message.type === 'conversion-progress' && message.target === 'service-worker') {
-      for (const [, port] of contentPorts) {
-        port.postMessage({
-          type: 'CONVERSION_PROGRESS',
-          stage: message.stage,
-          progress: message.progress,
-          message: message.message,
-        });
-      }
+      broadcastToAll({
+        type: 'CONVERSION_PROGRESS',
+        stage: message.stage,
+        progress: message.progress,
+        message: message.message,
+      });
       return false;
     }
 
     // Side panel bridge messages from content script
     if (message.type === 'SIDEPANEL_ELEMENT_PICKED') {
-      // Forward to all connected ports (side panel listens via port)
-      for (const [, port] of contentPorts) {
+      console.log('[Hub] SIDEPANEL_ELEMENT_PICKED received, sidePanelPorts count:', sidePanelPorts.size);
+      // Forward all element info to side panel ports
+      for (const port of sidePanelPorts) {
+        console.log('[Hub] Forwarding ELEMENT_PICKED to side panel port');
         port.postMessage({
           type: 'ELEMENT_PICKED',
           cssChange: message.cssChange,
+          className: message.className,
+          textContent: message.textContent,
+          cdpSelector: message.cdpSelector,
+          computedStyles: message.computedStyles,
+          cdpStyles: message.cdpStyles,
+          pageTokens: message.pageTokens,
         });
       }
       sendResponse({ success: true });
@@ -126,7 +150,7 @@ export function initializeMessagingHub() {
     }
 
     if (message.type === 'SIDEPANEL_PICKING_CANCELLED') {
-      for (const [, port] of contentPorts) {
+      for (const port of sidePanelPorts) {
         port.postMessage({ type: 'PICKING_CANCELLED' });
       }
       sendResponse({ success: true });
@@ -137,7 +161,7 @@ export function initializeMessagingHub() {
       // Capture screenshot of the region
       chrome.tabs.captureVisibleTab({ format: 'png', quality: 100 })
         .then((dataUrl) => {
-          for (const [, port] of contentPorts) {
+          for (const port of sidePanelPorts) {
             port.postMessage({
               type: 'SCREENSHOT_CAPTURED',
               dataUrl,
@@ -159,6 +183,75 @@ export function initializeMessagingHub() {
 
     handleOneShotMessage(message as ExtensionMessage, sender, sendResponse);
     return true; // async response
+  });
+}
+
+function handleSidePanelPort(port: chrome.runtime.Port) {
+  console.log('[Hub] Side panel connected, total ports:', sidePanelPorts.size + 1);
+  sidePanelPorts.add(port);
+
+  port.onMessage.addListener(async (message: ExtensionMessage) => {
+    // Side panel messages are handled the same as content script messages
+    switch (message.type) {
+      case 'CAPTURE_SCREENSHOT': {
+        try {
+          const dataUrl = await chrome.tabs.captureVisibleTab({
+            format: 'png',
+            quality: 100,
+          });
+          port.postMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl });
+        } catch (error) {
+          console.error('Screenshot capture failed:', error);
+          port.postMessage({
+            type: 'SCREENSHOT_ERROR',
+            error: (error as Error).message || 'Screenshot capture failed',
+          });
+        }
+        break;
+      }
+
+      case 'SUBMIT_TO_INTEGRATIONS': {
+        try {
+          startKeepAlive();
+          const results = await submitToAll(message.payload);
+          port.postMessage({ type: 'INTEGRATION_RESULTS', results });
+        } catch (error) {
+          port.postMessage({
+            type: 'INTEGRATION_RESULTS',
+            results: [{ integrationId: 'jira', success: false, error: (error as Error).message }],
+          });
+        } finally {
+          stopKeepAlive();
+        }
+        break;
+      }
+
+      case 'START_RECORDING': {
+        try {
+          await startRecording(message.tabId || 0);
+          port.postMessage({ type: 'RECORDING_STARTED' });
+        } catch (error) {
+          port.postMessage({ type: 'RECORDING_ERROR', error: (error as Error).message });
+        }
+        break;
+      }
+
+      case 'STOP_RECORDING': {
+        try {
+          await stopRecording();
+          port.postMessage({ type: 'RECORDING_STOPPED' });
+        } catch (error) {
+          console.error('Stop recording failed:', error);
+          port.postMessage({ type: 'RECORDING_ERROR', error: (error as Error).message });
+        }
+        break;
+      }
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    console.log('[Hub] Side panel disconnected');
+    sidePanelPorts.delete(port);
   });
 }
 

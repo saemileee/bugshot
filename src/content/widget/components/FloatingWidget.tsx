@@ -18,6 +18,7 @@ import {
   Pencil,
   FileText,
   Crop,
+  PanelRight,
 } from "lucide-react";
 
 interface WidgetLayout {
@@ -43,6 +44,7 @@ interface FloatingWidgetProps {
   onScreenshot: () => void;
   onRegionScreenshot: () => void;
   onRecordToggle: () => void;
+  onSwitchToPanel?: () => void;
   children: ReactNode;
   footer?: ReactNode;
 }
@@ -65,6 +67,7 @@ export function FloatingWidget({
   onScreenshot,
   onRegionScreenshot,
   onRecordToggle,
+  onSwitchToPanel,
   children,
   footer,
 }: FloatingWidgetProps) {
@@ -560,6 +563,24 @@ export function FloatingWidget({
         >
           <Settings className="w-4 h-4" />
         </button>
+
+        {/* Switch to Panel Mode */}
+        {onSwitchToPanel && (
+          <>
+            <div className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
+            <button
+              data-bar-btn
+              className={cn(
+                "relative w-8 h-8 flex items-center justify-center rounded-lg border-none bg-transparent cursor-pointer text-slate-400 transition-all flex-shrink-0",
+                "hover:bg-slate-100 hover:text-slate-600"
+              )}
+              onClick={onSwitchToPanel}
+              title="Switch to Side Panel Mode"
+            >
+              <PanelRight className="w-4 h-4" />
+            </button>
+          </>
+        )}
       </div>
     </>
   );
