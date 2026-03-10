@@ -1,6 +1,6 @@
 import type { IntegrationConfig, IntegrationResult, SubmissionPayload } from '@/shared/types/integration';
 
-export async function verifyN8n(
+export async function verifyWebhook(
   config: IntegrationConfig,
 ): Promise<{ success: boolean; displayName?: string; error?: string }> {
   const { webhookUrl } = config.credentials;
@@ -34,14 +34,14 @@ export async function verifyN8n(
   }
 }
 
-export async function submitToN8n(
+export async function submitToWebhook(
   config: IntegrationConfig,
   payload: SubmissionPayload,
 ): Promise<IntegrationResult> {
   const { webhookUrl } = config.credentials;
 
   if (!webhookUrl) {
-    return { integrationId: 'n8n', success: false, error: 'Webhook URL is required' };
+    return { integrationId: 'webhook', success: false, error: 'Webhook URL is required' };
   }
 
   try {
@@ -73,13 +73,13 @@ export async function submitToN8n(
     }
 
     return {
-      integrationId: 'n8n',
+      integrationId: 'webhook',
       success: true,
       url: webhookUrl,
     };
   } catch (error) {
     return {
-      integrationId: 'n8n',
+      integrationId: 'webhook',
       success: false,
       error: (error as Error).message,
     };

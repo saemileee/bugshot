@@ -3,7 +3,7 @@ import type { EpicConfig } from '@/shared/types/jira-ticket';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { verifyJira, submitToJira, checkJiraStatus, disconnectJira } from './jira';
 import { verifyGithub, submitToGithub } from './github';
-import { verifyN8n, submitToN8n } from './n8n';
+import { verifyWebhook, submitToWebhook } from './webhook';
 import { isAuthenticated, getCredentials } from '../jira/auth';
 
 // ── Storage helpers ──
@@ -79,7 +79,7 @@ export async function verifyIntegration(
   switch (config.id) {
     case 'jira': return verifyJira(config);
     case 'github': return verifyGithub(config);
-    case 'n8n': return verifyN8n(config);
+    case 'webhook': return verifyWebhook(config);
   }
 }
 
@@ -98,7 +98,7 @@ export async function checkIntegrationStatus(
       const result = await verifyGithub(config);
       return { connected: result.success, displayName: result.displayName };
     }
-    case 'n8n': {
+    case 'webhook': {
       if (!config.credentials.webhookUrl) return { connected: false };
       return { connected: true, displayName: new URL(config.credentials.webhookUrl).host };
     }
@@ -160,7 +160,7 @@ async function submitTo(
   switch (config.id) {
     case 'jira': return submitToJira(config, payload);
     case 'github': return submitToGithub(config, payload);
-    case 'n8n': return submitToN8n(config, payload);
+    case 'webhook': return submitToWebhook(config, payload);
   }
 }
 
@@ -171,7 +171,7 @@ export async function getAllIntegrationStatuses(): Promise<
 > {
   await ensureJiraMigration();
   const configs = await getIntegrationConfigs();
-  const ids: IntegrationId[] = ['jira', 'github', 'n8n'];
+  const ids: IntegrationId[] = ['jira', 'github', 'webhook'];
 
   return Promise.all(
     ids.map(async (id) => {

@@ -1,6 +1,6 @@
 import type { CSSChange } from './css-change';
 
-export type IntegrationId = 'jira' | 'github' | 'n8n';
+export type IntegrationId = 'jira' | 'github' | 'webhook';
 
 export interface IntegrationConfig {
   id: IntegrationId;

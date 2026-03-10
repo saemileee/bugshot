@@ -583,7 +583,7 @@ export function WidgetRoot() {
               </svg>
               <div className="flex-1">
                 <div className="font-medium mb-1">No platform connected</div>
-                <div>Connect to Jira, GitHub, or N8N in Settings to create issues.</div>
+                <div>Connect to Jira, GitHub, or Webhook in Settings to create issues.</div>
               </div>
             </div>
             <div className="flex gap-2">

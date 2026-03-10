@@ -218,7 +218,7 @@ function generatePreviewSummary(changes: CSSChange[], prefix: string): string {
 const INTEGRATION_LABELS: Record<IntegrationId, string> = {
   jira: "Jira",
   github: "GitHub",
-  n8n: "N8N",
+  webhook: "Webhook",
 };
 
 export function SubmitPanel({
@@ -949,7 +949,7 @@ export function SubmitPanel({
               </svg>
               <div className="flex-1 text-xs text-amber-700">
                 <div className="font-medium mb-1">Cannot create issue</div>
-                <div className="mb-2">No platforms connected. Configure Jira, GitHub, or N8N to submit issues.</div>
+                <div className="mb-2">No platforms connected. Configure Jira, GitHub, or Webhook to submit issues.</div>
                 {onGoToSettings && (
                   <button
                     onClick={onGoToSettings}

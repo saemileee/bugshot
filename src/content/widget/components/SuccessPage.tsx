@@ -10,7 +10,7 @@ interface SuccessPageProps {
 const INTEGRATION_LABELS: Record<IntegrationId, string> = {
   jira: 'Jira',
   github: 'GitHub',
-  n8n: 'n8n',
+  webhook: 'Webhook',
 };
 
 export function SuccessPage({ results, onClose }: SuccessPageProps) {

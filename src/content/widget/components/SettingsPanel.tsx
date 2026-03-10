@@ -626,8 +626,8 @@ function GithubSection() {
   );
 }
 
-// ── N8N Section ──
-function N8nSection() {
+// ── Webhook Section ──
+function WebhookSection() {
   const [open, setOpen] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [connected, setConnected] = useState(false);
@@ -637,7 +637,7 @@ function N8nSection() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    sendMsg({ type: "CHECK_INTEGRATION_STATUS", integrationId: "n8n" }).then(
+    sendMsg({ type: "CHECK_INTEGRATION_STATUS", integrationId: "webhook" }).then(
       (r) => {
         if (r.connected) {
           setConnected(true);
@@ -648,8 +648,8 @@ function N8nSection() {
     );
     chrome.storage.sync.get(STORAGE_KEYS.INTEGRATIONS, (result) => {
       const configs = result[STORAGE_KEYS.INTEGRATIONS] || {};
-      const n8n = configs.n8n;
-      if (n8n) setWebhookUrl(n8n.credentials?.webhookUrl || "");
+      const webhook = configs.webhook;
+      if (webhook) setWebhookUrl(webhook.credentials?.webhookUrl || "");
     });
   }, []);
 
@@ -662,7 +662,7 @@ function N8nSection() {
     setError(null);
     sendMsg({
       type: "SAVE_INTEGRATION_CONFIG",
-      integrationId: "n8n",
+      integrationId: "webhook",
       credentials: { webhookUrl: webhookUrl.trim() },
       settings: {},
     }).then((r) => {
@@ -674,14 +674,14 @@ function N8nSection() {
         setTimeout(() => setSaved(false), 2000);
       } else {
         const errorMsg = (r.error as string) || "Verification failed";
-        console.warn("[N8nSection] Connection failed:", errorMsg);
+        console.warn("[WebhookSection] Connection failed:", errorMsg);
         setError(errorMsg);
       }
     });
   }, [webhookUrl]);
 
   const handleDisconnect = useCallback(() => {
-    sendMsg({ type: "DISCONNECT_INTEGRATION", integrationId: "n8n" }).then(
+    sendMsg({ type: "DISCONNECT_INTEGRATION", integrationId: "webhook" }).then(
       () => {
         setConnected(false);
         setDisplayName("");
@@ -698,12 +698,10 @@ function N8nSection() {
       >
         <div className="flex items-center gap-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <rect width="24" height="24" rx="4" fill="#EA4B71" />
-            <text x="4" y="17" fill="white" fontSize="12" fontWeight="bold">
-              n8n
-            </text>
+            <rect width="24" height="24" rx="4" fill="#6366f1" />
+            <path d="M7 12h10M12 7v10" stroke="white" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          <span className="text-xs font-semibold text-slate-800">N8N</span>
+          <span className="text-xs font-semibold text-slate-800">Webhook</span>
           {connected && (
             <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full border border-green-200">
               Connected
@@ -724,7 +722,7 @@ function N8nSection() {
             <>
               <div className="flex items-center gap-1.5 text-xs p-2 rounded-lg bg-green-50 text-green-600 mb-2">
                 <Check className="w-3.5 h-3.5" />
-                Connected to {displayName || "N8N"}
+                Connected to {displayName || "Webhook"}
               </div>
               <Button
                 variant="ghost"
@@ -736,11 +734,14 @@ function N8nSection() {
             </>
           ) : (
             <>
+              <div className="text-[10px] text-gray-500 mb-2">
+                Works with Zapier, Make, n8n, or any custom endpoint
+              </div>
               <div className="mb-2.5">
                 <Label>Webhook URL</Label>
                 <Input
                   type="url"
-                  placeholder="https://your-n8n.app/webhook/..."
+                  placeholder="https://hooks.example.com/..."
                   value={webhookUrl}
                   onChange={(e) => setWebhookUrl(e.target.value)}
                 />
@@ -831,7 +832,7 @@ export function SettingsPanel() {
         <div className="flex flex-col gap-2">
           <JiraSection defaultOpen />
           <GithubSection />
-          <N8nSection />
+          <WebhookSection />
         </div>
       </section>
 
