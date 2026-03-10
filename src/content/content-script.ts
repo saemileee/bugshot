@@ -1,6 +1,7 @@
 import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { WidgetRoot } from './widget/WidgetRoot';
+import { VisibilityProvider } from './widget/contexts/VisibilityContext';
 import widgetCSS from './widget/styles/widget.css?inline';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { initDevTools } from './widget/dev-tools';
@@ -42,7 +43,9 @@ function mountWidget() {
   shadow.appendChild(container);
 
   reactRoot = createRoot(container);
-  reactRoot.render(createElement(WidgetRoot));
+  reactRoot.render(
+    createElement(VisibilityProvider, null, createElement(WidgetRoot))
+  );
 }
 
 function unmountWidget() {
@@ -95,24 +98,9 @@ async function initializeWidget() {
     }
   });
 
-  // Unmount widget when tab becomes hidden to save CPU/memory
-  // Remount when tab becomes visible again
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      // Tab is now in background - unmount to stop all observers/listeners
-      unmountWidget();
-    } else if (document.visibilityState === 'visible') {
-      // Tab is now active - check if widget should be mounted
-      chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE).then((result) => {
-        const visible = result[STORAGE_KEYS.WIDGET_VISIBLE] ?? true;
-        if (visible) {
-          mountWidget();
-        }
-      }).catch(() => {
-        // Context invalidated, do nothing
-      });
-    }
-  });
+  // Note: We no longer unmount on visibilitychange to preserve form state.
+  // Instead, VisibilityProvider notifies components to pause expensive operations
+  // (observers, RAF loops) while keeping React state intact.
 }
 
 // Initialize when DOM is ready
