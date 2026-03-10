@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Settings, Camera, Video, MousePointer2, Square, X, ArrowRight } from 'lucide-react';
+import { Settings, Camera, Video, MousePointer2, Square, X, ArrowRight, ArrowLeft } from 'lucide-react';
 import { SettingsPanel } from '@/content/widget/components/SettingsPanel';
 import { ChangesSummary } from '@/content/widget/components/ChangesSummary';
 import { ManualDescription } from '@/content/widget/components/ManualDescription';
@@ -20,6 +20,11 @@ interface ScreenshotData {
   description?: string;
 }
 
+interface PendingElement {
+  selector: string;
+  screenshotBefore?: string;
+}
+
 export function SidePanelRoot() {
   const [activeTab, setActiveTab] = useState<Tab>('capture');
   const [showPreview, setShowPreview] = useState(false);
@@ -33,6 +38,10 @@ export function SidePanelRoot() {
   const [recordingSize, setRecordingSize] = useState<number | null>(null);
   const [recordingMimeType, setRecordingMimeType] = useState<string | null>(null);
 
+  // Editing mode state (after element is picked)
+  const [pendingElement, setPendingElement] = useState<PendingElement | null>(null);
+  const [editNote, setEditNote] = useState('');
+
   // Status state
   const [isRecording, setIsRecording] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -40,6 +49,7 @@ export function SidePanelRoot() {
   const [isConverting, setIsConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<{ progress: number; message: string } | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [hasConnectedPlatform, setHasConnectedPlatform] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -84,9 +94,13 @@ export function SidePanelRoot() {
     // Handle messages from content script (via side panel bridge)
     if (msg.type === 'ELEMENT_PICKED') {
       setIsPicking(false);
-      // Element info comes from content script
       if ('cssChange' in msg && msg.cssChange) {
-        setChanges(prev => [...prev, msg.cssChange as CSSChange]);
+        const change = msg.cssChange as Partial<CSSChange>;
+        // Enter editing mode instead of immediately adding the change
+        setPendingElement({
+          selector: change.selector || 'element',
+          screenshotBefore: undefined, // Will be captured separately
+        });
       }
     }
     if (msg.type === 'PICKING_CANCELLED') {
@@ -96,6 +110,7 @@ export function SidePanelRoot() {
       if ('dataUrl' in msg && msg.dataUrl) {
         const filename = `screenshot-${Date.now()}.png`;
         setScreenshots(prev => [...prev, { original: msg.dataUrl as string, filename }]);
+        setScreenshotError(null);
       }
       setIsCapturing(false);
     }
@@ -178,24 +193,31 @@ export function SidePanelRoot() {
   // Actions
   const handlePickElement = useCallback(() => {
     setIsPicking(true);
+    setPendingElement(null);
+    setEditNote('');
     sendToContentScript({ type: 'START_PICKING' });
   }, [sendToContentScript]);
 
   const handleScreenshot = useCallback(async () => {
     setIsCapturing(true);
+    setScreenshotError(null);
     try {
       const response = await sendMessage({ type: 'CAPTURE_SCREENSHOT', tabId: currentTabId ?? 0 });
       if (response?.dataUrl) {
         const filename = `screenshot-${Date.now()}.png`;
         setScreenshots(prev => [...prev, { original: response.dataUrl!, filename }]);
+      } else {
+        setScreenshotError('Failed to capture screenshot. Please try again.');
       }
     } catch (error) {
       console.error('[SidePanel] Screenshot failed:', error);
+      setScreenshotError('Failed to capture screenshot. Please try again.');
     }
     setIsCapturing(false);
   }, [sendMessage, currentTabId]);
 
   const handleRegionScreenshot = useCallback(() => {
+    setScreenshotError(null);
     sendToContentScript({ type: 'START_REGION_SELECT' });
   }, [sendToContentScript]);
 
@@ -223,6 +245,33 @@ export function SidePanelRoot() {
     }
   }, [isRecording, sendMessage, currentTabId]);
 
+  // Confirm pending element as a CSS change
+  const handleConfirmElement = useCallback(() => {
+    if (!pendingElement) return;
+
+    const change: CSSChange = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      selector: pendingElement.selector,
+      elementDescription: pendingElement.selector,
+      url: '', // Will be filled by content script or on submit
+      properties: [],
+      description: editNote.trim() || undefined,
+      screenshotBefore: pendingElement.screenshotBefore,
+      status: 'pending',
+    };
+
+    setChanges(prev => [...prev, change]);
+    setPendingElement(null);
+    setEditNote('');
+  }, [pendingElement, editNote]);
+
+  // Cancel pending element editing
+  const handleCancelElement = useCallback(() => {
+    setPendingElement(null);
+    setEditNote('');
+  }, []);
+
   const handleClearRecording = useCallback(() => {
     if (recordingId) {
       sendMessage({ type: 'DELETE_RECORDING', recordingId } as any);
@@ -247,6 +296,9 @@ export function SidePanelRoot() {
     setIsConverting(false);
     setConversionProgress(null);
     setShowPreview(false);
+    setPendingElement(null);
+    setEditNote('');
+    setScreenshotError(null);
   }, [recordingId, sendMessage]);
 
   const handleRemoveChange = useCallback((id: string) => {
@@ -276,14 +328,102 @@ export function SidePanelRoot() {
     setIsConverting(false);
     setConversionProgress(null);
     setShowPreview(false);
+    setPendingElement(null);
+    setEditNote('');
   }, []);
 
+  const isEditing = !!pendingElement;
   const hasContent = screenshots.length > 0 || !!description.trim() || changes.length > 0 || !!recordingId;
+
+  // Footer content based on state
+  const footerContent = (() => {
+    if (activeTab !== 'capture' || showPreview) return null;
+
+    // Editing mode footer
+    if (isEditing) {
+      return (
+        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
+          <div className="flex flex-col gap-3">
+            <textarea
+              className="w-full px-3 py-2.5 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 resize-none outline-none placeholder:text-slate-400 focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              placeholder="Describe what should change..."
+              spellCheck={false}
+              rows={2}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="ghost" onClick={handleCancelElement}>
+                <ArrowLeft className="w-3 h-3" />
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={handleConfirmElement}
+              >
+                Add Issue
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Normal mode footer (with content)
+    if (hasContent) {
+      if (!hasConnectedPlatform && !checkingAuth) {
+        return (
+          <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 text-amber-700 text-xs border border-amber-200">
+                <div className="flex-1">
+                  <div className="font-medium mb-1">No platform connected</div>
+                  <div>Connect to Jira, GitHub, or Webhook in Settings.</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" className="text-gray-500 hover:text-red-500" onClick={handleClearAll}>
+                  Clear All
+                </Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setActiveTab('settings')}>
+                  Open Settings
+                  <ArrowRight className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
+          <div className="flex gap-2">
+            <Button variant="ghost" className="text-gray-500 hover:text-red-500" onClick={handleClearAll}>
+              Clear All
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setShowPreview(true)}
+              disabled={checkingAuth}
+            >
+              {checkingAuth ? 'Checking...' : 'Review Issue'}
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  })();
 
   return (
     <div className="flex flex-col h-screen bg-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white shrink-0">
         <div className="flex items-center gap-2">
           <img src={chrome.runtime.getURL('src/assets/icons/icon-32.png')} alt="BugShot" className="w-6 h-6" />
           <span className="font-semibold text-slate-800">BugShot</span>
@@ -302,8 +442,8 @@ export function SidePanelRoot() {
       </header>
 
       {/* Toolbar */}
-      {activeTab === 'capture' && !showPreview && (
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 bg-slate-50">
+      {activeTab === 'capture' && !showPreview && !isEditing && (
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 bg-slate-50 shrink-0">
           <button
             onClick={handlePickElement}
             disabled={isPicking}
@@ -350,7 +490,7 @@ export function SidePanelRoot() {
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {activeTab === 'settings' ? (
           <SettingsPanel />
         ) : showPreview ? (
@@ -378,6 +518,14 @@ export function SidePanelRoot() {
               <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 text-xs border-b border-red-100">
                 <span className="flex-1">Recording error: {recordError}</span>
                 <button onClick={() => setRecordError(null)} className="p-1 hover:bg-red-100 rounded">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            {screenshotError && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
+                <span className="flex-1">{screenshotError}</span>
+                <button onClick={() => setScreenshotError(null)} className="p-1 hover:bg-amber-100 rounded">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -415,6 +563,18 @@ export function SidePanelRoot() {
               </div>
             )}
 
+            {/* Editing mode indicator */}
+            {isEditing && (
+              <div className="px-4 py-3 bg-violet-50 border-b border-violet-100">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-violet-600 font-medium">Selected:</span>
+                  <code className="px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded font-mono text-[11px]">
+                    {pendingElement?.selector}
+                  </code>
+                </div>
+              </div>
+            )}
+
             {/* CSS Changes */}
             <div className="px-4 py-4">
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-3">
@@ -426,7 +586,10 @@ export function SidePanelRoot() {
               </h3>
               <ChangesSummary
                 changes={changes}
-                captureStatus={{ state: 'idle' }}
+                captureStatus={isEditing && pendingElement
+                  ? { state: 'before_captured' as const, selector: pendingElement.selector }
+                  : { state: 'idle' as const }
+                }
                 onRemoveChange={handleRemoveChange}
               />
             </div>
@@ -510,44 +673,7 @@ export function SidePanelRoot() {
       </div>
 
       {/* Footer */}
-      {activeTab === 'capture' && !showPreview && hasContent && (
-        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
-          {!hasConnectedPlatform && !checkingAuth ? (
-            <div className="space-y-2">
-              <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 text-amber-700 text-xs border border-amber-200">
-                <div className="flex-1">
-                  <div className="font-medium mb-1">No platform connected</div>
-                  <div>Connect to Jira, GitHub, or Webhook in Settings.</div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" className="text-gray-500 hover:text-red-500" onClick={handleClearAll}>
-                  Clear All
-                </Button>
-                <Button variant="secondary" className="flex-1" onClick={() => setActiveTab('settings')}>
-                  Open Settings
-                  <ArrowRight className="w-3 h-3" />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Button variant="ghost" className="text-gray-500 hover:text-red-500" onClick={handleClearAll}>
-                Clear All
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => setShowPreview(true)}
-                disabled={checkingAuth}
-              >
-                {checkingAuth ? 'Checking...' : 'Review Issue'}
-                <ArrowRight className="w-3 h-3" />
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      {footerContent}
     </div>
   );
 }
