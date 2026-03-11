@@ -713,26 +713,26 @@ export function SidePanelRoot() {
               />
             )}
 
-            {/* CSS Changes */}
-            <div className="px-4 py-4">
-              <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-3">
-                <span className="text-slate-400">[</span>CSS Changes
-                <span className="text-slate-400">]</span>
-                {changes.length > 0 && (
-                  <span className="text-xs font-medium text-violet-600">{changes.length}</span>
-                )}
-              </h3>
-              <ChangesSummary
-                changes={changes}
-                captureStatus={isEditing && pendingElement
-                  ? { state: 'before_captured' as const, selector: pendingElement.selector }
-                  : { state: 'idle' as const }
-                }
-                onRemoveChange={handleRemoveChange}
-              />
-            </div>
+            {/* CSS Changes - hidden during editing */}
+            {!isEditing && (
+              <div className="px-4 py-4">
+                <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-3">
+                  <span className="text-slate-400">[</span>CSS Changes
+                  <span className="text-slate-400">]</span>
+                  {changes.length > 0 && (
+                    <span className="text-xs font-medium text-violet-600">{changes.length}</span>
+                  )}
+                </h3>
+                <ChangesSummary
+                  changes={changes}
+                  captureStatus={{ state: 'idle' as const }}
+                  onRemoveChange={handleRemoveChange}
+                />
+              </div>
+            )}
 
-            {/* Media */}
+            {/* Media - hidden during editing */}
+            {!isEditing && (
             <div className="px-4 py-4 border-t border-slate-100">
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-3">
                 <span className="text-slate-400">[</span>Media
@@ -794,8 +794,10 @@ export function SidePanelRoot() {
                 )}
               </div>
             </div>
+            )}
 
-            {/* Notes */}
+            {/* Notes - hidden during editing */}
+            {!isEditing && (
             <div className="px-4 py-4 border-t border-slate-100">
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-3">
                 <span className="text-slate-400">[</span>Notes
@@ -806,6 +808,7 @@ export function SidePanelRoot() {
                 onDescriptionChange={setDescription}
               />
             </div>
+            )}
           </>
         )}
       </div>
