@@ -8,7 +8,7 @@ import {
 import { cn } from "@/shared/utils/cn";
 import { STORAGE_KEYS } from "@/shared/constants";
 import {
-  MousePointer,
+  MousePointer2,
   Camera,
   Video,
   Square,
@@ -450,7 +450,7 @@ export function FloatingWidget({
           {isPicking ? (
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse-opacity" />
           ) : (
-            <MousePointer className="w-4 h-4" />
+            <MousePointer2 className="w-4 h-4" />
           )}
         </button>
 

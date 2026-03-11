@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Settings, Camera, Video, MousePointer2, Square, X, ArrowRight, ArrowLeft, Layers } from 'lucide-react';
+import { Settings, X, ArrowRight, ArrowLeft, Layers } from 'lucide-react';
 import { SettingsPanel } from '@/content/widget/components/SettingsPanel';
 import { ChangesSummary } from '@/content/widget/components/ChangesSummary';
 import { ManualDescription } from '@/content/widget/components/ManualDescription';
@@ -10,6 +10,14 @@ import { StyleEditor } from '@/content/widget/components/StyleEditor';
 import { useSWMessaging } from '@/content/widget/hooks/useSWMessaging';
 import { useDraftPersistence, clearDraft } from '@/content/widget/hooks/useDraftPersistence';
 import { STORAGE_KEYS } from '@/shared/constants';
+import { ActionToolbar } from '@/shared/components/ActionToolbar';
+import {
+  RecordingAlert,
+  PickingAlert,
+  ConvertingAlert,
+  ErrorAlert,
+  WarningAlert,
+} from '@/shared/components/StatusAlert';
 import type { ExtensionMessage, CDPStyleResult } from '@/shared/types/messages';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ToolbarTab } from '@/content/widget/components/FloatingWidget';
@@ -605,49 +613,17 @@ export function SidePanelRoot() {
 
       {/* Toolbar */}
       {activeTab === 'capture' && !showPreview && !isEditing && (
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 bg-slate-50 shrink-0">
-          <button
-            onClick={handlePickElement}
-            disabled={isPicking}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              isPicking
-                ? 'bg-violet-100 text-violet-600'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-            title="Pick Element"
-          >
-            <MousePointer2 className="w-3.5 h-3.5" />
-            <span>Pick</span>
-          </button>
-          <button
-            onClick={handleScreenshot}
-            disabled={isCapturing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50"
-            title="Full Page Screenshot"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Full</span>
-          </button>
-          <button
-            onClick={handleRegionScreenshot}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors"
-            title="Region Screenshot"
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span>Region</span>
-          </button>
-          <button
-            onClick={handleRecordToggle}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              isRecording
-                ? 'bg-red-100 text-red-600'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-            title={isRecording ? 'Stop Recording' : 'Start Recording'}
-          >
-            <Video className="w-3.5 h-3.5" />
-            <span>{isRecording ? 'Stop' : 'Record'}</span>
-          </button>
+        <div className="px-3 py-2 border-b border-slate-100 bg-slate-50 shrink-0">
+          <ActionToolbar
+            isPicking={isPicking}
+            isCapturing={isCapturing}
+            isRecording={isRecording}
+            onPickElement={handlePickElement}
+            onScreenshot={handleScreenshot}
+            onRegionScreenshot={handleRegionScreenshot}
+            onRecordToggle={handleRecordToggle}
+            variant="full"
+          />
         </div>
       )}
 
@@ -677,52 +653,31 @@ export function SidePanelRoot() {
           <>
             {/* Status messages */}
             {recordError && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 text-xs border-b border-red-100">
-                <span className="flex-1">Recording error: {recordError}</span>
-                <button onClick={() => setRecordError(null)} className="p-1 hover:bg-red-100 rounded">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <ErrorAlert
+                message={`Recording error: ${recordError}`}
+                onDismiss={() => setRecordError(null)}
+              />
             )}
             {screenshotError && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
-                <span className="flex-1">{screenshotError}</span>
-                <button onClick={() => setScreenshotError(null)} className="p-1 hover:bg-amber-100 rounded">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <WarningAlert
+                message={screenshotError}
+                onDismiss={() => setScreenshotError(null)}
+              />
             )}
-            {isRecording && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 text-xs border-b border-red-100">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse-opacity" />
-                <span>Recording in progress...</span>
-              </div>
-            )}
+            {isRecording && <RecordingAlert />}
             {isConverting && conversionProgress && (
-              <div className="px-4 py-2 bg-blue-50 text-blue-700 text-xs border-b border-blue-100">
-                <div className="mb-1">{conversionProgress.message}</div>
-                <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all"
-                    style={{ width: `${conversionProgress.progress}%` }}
-                  />
-                </div>
-              </div>
+              <ConvertingAlert
+                progress={conversionProgress.progress}
+                message={conversionProgress.message}
+              />
             )}
             {isPicking && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-violet-50 text-violet-700 text-xs border-b border-violet-100">
-                <MousePointer2 className="w-3.5 h-3.5" />
-                <span>Click on an element in the page to select it...</span>
-                <button
-                  onClick={() => {
-                    setIsPicking(false);
-                    sendToContentScript({ type: 'CANCEL_PICKING' });
-                  }}
-                  className="ml-auto text-violet-500 hover:text-violet-700"
-                >
-                  Cancel
-                </button>
-              </div>
+              <PickingAlert
+                onCancel={() => {
+                  setIsPicking(false);
+                  sendToContentScript({ type: 'CANCEL_PICKING' });
+                }}
+              />
             )}
 
             {/* Editing mode indicator */}
