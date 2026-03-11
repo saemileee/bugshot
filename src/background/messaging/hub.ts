@@ -45,11 +45,6 @@ interface CDPSession {
 const cdpSessions = new Map<number, CDPSession>();
 const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
 
-// CDP request queue - ensures sequential execution per tab (fixes race condition)
-const cdpRequestQueues = new Map<number, Promise<CDPStyleResult | null>>();
-// Track failed tabs to avoid retry spam
-const cdpFailedTabs = new Map<number, number>(); // tabId -> timestamp
-const CDP_FAILURE_COOLDOWN = 60000; // 60 seconds before retry (longer when DevTools is open)
 
 // Guard to prevent duplicate listener registration
 let hubInitialized = false;
@@ -65,10 +60,6 @@ export function isSidePanelOpen(): boolean {
  * Clean up CDP session for a specific tab (called on tab close)
  */
 export function cleanupCDPSession(tabId: number) {
-  // Clean up failure tracking and request queue
-  cdpFailedTabs.delete(tabId);
-  cdpRequestQueues.delete(tabId);
-
   const session = cdpSessions.get(tabId);
   if (session) {
     if (session.detachTimer) {
@@ -957,26 +948,6 @@ function escapeCSSSelector(selector: string): string {
 }
 
 async function getElementStylesViaCDP(tabId: number, selector: string): Promise<CDPStyleResult> {
-  // Check if this tab failed recently - avoid spamming retries
-  const failedAt = cdpFailedTabs.get(tabId);
-  if (failedAt && Date.now() - failedAt < CDP_FAILURE_COOLDOWN) {
-    throw new Error('CDP unavailable for this tab (cooldown)');
-  }
-
-  // Queue requests per tab to ensure sequential execution (fixes race condition)
-  const previousRequest = cdpRequestQueues.get(tabId) || Promise.resolve(null);
-
-  const currentRequest = previousRequest
-    .catch(() => null) // Ignore previous failures
-    .then(() => executeGetElementStyles(tabId, selector));
-
-  cdpRequestQueues.set(tabId, currentRequest);
-
-  return currentRequest;
-}
-
-// Actual CDP execution (called sequentially per tab)
-async function executeGetElementStyles(tabId: number, selector: string): Promise<CDPStyleResult> {
   const target = { tabId };
   const escapedSelector = escapeCSSSelector(selector);
 
@@ -995,11 +966,8 @@ async function executeGetElementStyles(tabId: number, selector: string): Promise
           lastUsed: Date.now(),
         };
         cdpSessions.set(tabId, session);
-        // Clear any failure flag on successful attach
-        cdpFailedTabs.delete(tabId);
       } catch (attachError) {
-        // Mark as failed to prevent retry spam
-        cdpFailedTabs.set(tabId, Date.now());
+        console.error('[CDP] Failed to attach debugger:', attachError);
         throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
       }
     }
@@ -1123,11 +1091,6 @@ async function executeGetElementStyles(tabId: number, selector: string): Promise
         // Ignore detach errors
       }
       cdpSessions.delete(tabId);
-    }
-    // Mark tab as failed if it's a connection error
-    const errMsg = (error as Error).message || '';
-    if (errMsg.includes('attach') || errMsg.includes('Detached') || errMsg.includes('not attached')) {
-      cdpFailedTabs.set(tabId, Date.now());
     }
     throw error;
   }
