@@ -45,6 +45,12 @@ interface CDPSession {
 const cdpSessions = new Map<number, CDPSession>();
 const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
 
+// CDP request locking to prevent concurrent attach attempts
+const cdpLocks = new Map<number, Promise<void>>();
+// Track failed tabs to avoid retry spam
+const cdpFailedTabs = new Map<number, number>(); // tabId -> timestamp
+const CDP_FAILURE_COOLDOWN = 60000; // 60 seconds before retry (longer when DevTools is open)
+
 // Guard to prevent duplicate listener registration
 let hubInitialized = false;
 
@@ -59,6 +65,10 @@ export function isSidePanelOpen(): boolean {
  * Clean up CDP session for a specific tab (called on tab close)
  */
 export function cleanupCDPSession(tabId: number) {
+  // Clean up failure tracking
+  cdpFailedTabs.delete(tabId);
+  cdpLocks.delete(tabId);
+
   const session = cdpSessions.get(tabId);
   if (session) {
     if (session.detachTimer) {
@@ -203,16 +213,31 @@ function handleSidePanelPort(port: chrome.runtime.Port) {
     switch (message.type) {
       case 'CAPTURE_SCREENSHOT': {
         try {
+          // Check if current tab is a restricted URL before attempting capture
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const activeTab = tabs[0];
+          const url = activeTab?.url || '';
+          if (url.startsWith('chrome://') || url.startsWith('devtools://') || url.startsWith('chrome-extension://')) {
+            port.postMessage({
+              type: 'SCREENSHOT_ERROR',
+              error: 'Cannot capture restricted page',
+            });
+            break;
+          }
           const dataUrl = await chrome.tabs.captureVisibleTab({
             format: 'png',
             quality: 100,
           });
           port.postMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl });
         } catch (error) {
-          console.error('Screenshot capture failed:', error);
+          // Only log once per error type to prevent console spam
+          const errMsg = (error as Error).message || 'Screenshot capture failed';
+          if (!errMsg.includes('devtools://') && !errMsg.includes('chrome://')) {
+            console.error('Screenshot capture failed:', error);
+          }
           port.postMessage({
             type: 'SCREENSHOT_ERROR',
-            error: (error as Error).message || 'Screenshot capture failed',
+            error: errMsg,
           });
         }
         break;
@@ -272,16 +297,31 @@ function handleContentPort(port: chrome.runtime.Port) {
     switch (message.type) {
       case 'CAPTURE_SCREENSHOT': {
         try {
+          // Check if current tab is a restricted URL before attempting capture
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const activeTab = tabs[0];
+          const url = activeTab?.url || '';
+          if (url.startsWith('chrome://') || url.startsWith('devtools://') || url.startsWith('chrome-extension://')) {
+            port.postMessage({
+              type: 'SCREENSHOT_ERROR',
+              error: 'Cannot capture restricted page',
+            });
+            break;
+          }
           const dataUrl = await chrome.tabs.captureVisibleTab({
             format: 'png',
             quality: 100,
           });
           port.postMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl });
         } catch (error) {
-          console.error('Screenshot capture failed:', error);
+          // Only log once per error type to prevent console spam
+          const errMsg = (error as Error).message || 'Screenshot capture failed';
+          if (!errMsg.includes('devtools://') && !errMsg.includes('chrome://')) {
+            console.error('Screenshot capture failed:', error);
+          }
           port.postMessage({
             type: 'SCREENSHOT_ERROR',
-            error: (error as Error).message || 'Screenshot capture failed',
+            error: errMsg,
           });
         }
         break;
@@ -347,11 +387,15 @@ function handleContentPort(port: chrome.runtime.Port) {
           const styles = await getElementStylesViaCDP(tabId, message.selector);
           port.postMessage({ type: 'ELEMENT_STYLES_RESULT', success: true, styles });
         } catch (error) {
-          console.error('CDP CSS fetch failed:', error);
+          const errMsg = (error as Error).message;
+          // Don't log cooldown errors - they're expected when DevTools is open
+          if (!errMsg.includes('cooldown')) {
+            console.error('CDP CSS fetch failed:', error);
+          }
           port.postMessage({
             type: 'ELEMENT_STYLES_RESULT',
             success: false,
-            error: (error as Error).message,
+            error: errMsg,
           });
         }
         break;
@@ -614,11 +658,15 @@ function handleOneShotMessage(
       getElementStylesViaCDP(tabId, message.selector).then((styles) => {
         sendResponse({ type: 'ELEMENT_STYLES_RESULT', success: true, styles });
       }).catch((error) => {
-        console.error('CDP CSS fetch failed:', error);
+        const errMsg = (error as Error).message;
+        // Don't log cooldown errors - they're expected when DevTools is open
+        if (!errMsg.includes('cooldown')) {
+          console.error('CDP CSS fetch failed:', error);
+        }
         sendResponse({
           type: 'ELEMENT_STYLES_RESULT',
           success: false,
-          error: (error as Error).message,
+          error: errMsg,
         });
       });
       break;
@@ -649,13 +697,22 @@ function handleOneShotMessage(
         sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: 'No tab ID' });
         break;
       }
-      chrome.tabs.captureVisibleTab({ format: 'png', quality: 100 })
-        .then((dataUrl) => {
-          sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl });
-        })
-        .catch((error) => {
-          sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: (error as Error).message });
-        });
+      // Check if current tab is a restricted URL before attempting capture
+      chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+        const activeTab = tabs[0];
+        const url = activeTab?.url || '';
+        if (url.startsWith('chrome://') || url.startsWith('devtools://') || url.startsWith('chrome-extension://')) {
+          sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: 'Cannot capture restricted page' });
+          return;
+        }
+        chrome.tabs.captureVisibleTab({ format: 'png', quality: 100 })
+          .then((dataUrl) => {
+            sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl });
+          })
+          .catch((error) => {
+            sendResponse({ type: 'SCREENSHOT_CAPTURED', dataUrl: null, error: (error as Error).message });
+          });
+      });
       break;
     }
   }
@@ -903,46 +960,70 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
   const target = { tabId };
   const escapedSelector = escapeCSSSelector(selector);
 
-  // Check if we have an active session for this tab
-  let session = cdpSessions.get(tabId);
+  // Check if this tab failed recently - avoid spamming retries
+  const failedAt = cdpFailedTabs.get(tabId);
+  if (failedAt && Date.now() - failedAt < CDP_FAILURE_COOLDOWN) {
+    throw new Error('CDP unavailable for this tab (cooldown)');
+  }
 
-  // Attach debugger (or reuse existing session)
-  if (!session || !session.attached) {
+  // Wait for any existing CDP operation on this tab to complete
+  const existingLock = cdpLocks.get(tabId);
+  if (existingLock) {
     try {
-      await chrome.debugger.attach(target, '1.3');
-
-      session = {
-        tabId,
-        attached: true,
-        lastUsed: Date.now(),
-      };
-      cdpSessions.set(tabId, session);
-    } catch (attachError) {
-      console.error('[CDP] Failed to attach debugger:', attachError);
-      throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
+      await existingLock;
+    } catch {
+      // Previous operation failed, continue with ours
     }
   }
 
-  // Update last used time and reset detach timer
-  session.lastUsed = Date.now();
-  if (session.detachTimer) {
-    clearTimeout(session.detachTimer);
-  }
-
-  // Schedule auto-detach after timeout
-  session.detachTimer = setTimeout(async () => {
-    const s = cdpSessions.get(tabId);
-    if (s && s.attached) {
-      try {
-        await chrome.debugger.detach(target);
-      } catch {
-        // Ignore detach errors
-      }
-      cdpSessions.delete(tabId);
-    }
-  }, CDP_SESSION_TIMEOUT) as unknown as number;
+  // Create a new lock for this operation
+  let resolveLock: () => void;
+  const lockPromise = new Promise<void>((resolve) => { resolveLock = resolve; });
+  cdpLocks.set(tabId, lockPromise);
 
   try {
+    // Check if we have an active session for this tab
+    let session = cdpSessions.get(tabId);
+
+    // Attach debugger (or reuse existing session)
+    if (!session || !session.attached) {
+      try {
+        await chrome.debugger.attach(target, '1.3');
+
+        session = {
+          tabId,
+          attached: true,
+          lastUsed: Date.now(),
+        };
+        cdpSessions.set(tabId, session);
+        // Clear any failure flag on successful attach
+        cdpFailedTabs.delete(tabId);
+      } catch (attachError) {
+        // Mark as failed to prevent retry spam
+        cdpFailedTabs.set(tabId, Date.now());
+        throw new Error(`Debugger attach failed: ${(attachError as Error).message}`);
+      }
+    }
+
+    // Update last used time and reset detach timer
+    session.lastUsed = Date.now();
+    if (session.detachTimer) {
+      clearTimeout(session.detachTimer);
+    }
+
+    // Schedule auto-detach after timeout
+    session.detachTimer = setTimeout(async () => {
+      const s = cdpSessions.get(tabId);
+      if (s && s.attached) {
+        try {
+          await chrome.debugger.detach(target);
+        } catch {
+          // Ignore detach errors
+        }
+        cdpSessions.delete(tabId);
+      }
+    }, CDP_SESSION_TIMEOUT) as unknown as number;
+
     // Enable DOM first, then CSS (DOM must be enabled before CSS operations)
     await chrome.debugger.sendCommand(target, 'DOM.enable');
     await chrome.debugger.sendCommand(target, 'CSS.enable');
@@ -960,12 +1041,10 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
         selector: escapedSelector,
       }) as { nodeId: number };
     } catch (queryError) {
-      console.error('[CDP] querySelector failed for:', escapedSelector, queryError);
       throw new Error(`Invalid selector "${selector}": ${(queryError as Error).message}`);
     }
 
     if (!queryResult.nodeId) {
-      console.warn('[CDP] Element not found with selector:', escapedSelector);
       throw new Error(`Element not found: ${selector}`);
     }
 
@@ -1046,6 +1125,15 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
       }
       cdpSessions.delete(tabId);
     }
+    // Mark tab as failed if it's a connection error
+    const errMsg = (error as Error).message || '';
+    if (errMsg.includes('attach') || errMsg.includes('Detached') || errMsg.includes('not attached')) {
+      cdpFailedTabs.set(tabId, Date.now());
+    }
     throw error;
+  } finally {
+    // Release the lock
+    resolveLock!();
+    cdpLocks.delete(tabId);
   }
 }

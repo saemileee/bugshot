@@ -1,16 +1,14 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PropertyValueInput } from './PropertyValueInput';
 import { PropertyNameInput } from './PropertyNameInput';
 import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
 import type { CDPStyleResult } from '@/shared/types/messages';
 import { cn } from '@/shared/utils/cn';
-import { buildCDPSelector } from '@/shared/utils/css-selector';
 
 interface StyleEditorProps {
   element?: Element;
   // Remote mode props (for side panel)
   remoteMode?: boolean;
-  selector?: string;
   initialClassName?: string;
   initialTextContent?: string;
   initialCdpStyles?: CDPStyleResult | null;
@@ -141,29 +139,6 @@ function collapseToShorthand(props: RuleProperty[]): RuleProperty[] {
   return result;
 }
 
-/* ── Fetch styles via CDP (Chrome DevTools Protocol) ── */
-
-async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: 'GET_ELEMENT_STYLES', selector },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn('[StyleEditor] CDP request failed:', chrome.runtime.lastError.message);
-          resolve(null);
-          return;
-        }
-        if (response?.success && response.styles) {
-          resolve(response.styles as CDPStyleResult);
-        } else {
-          console.warn('[StyleEditor] CDP fetch failed:', response?.error);
-          resolve(null);
-        }
-      }
-    );
-  });
-}
-
 function convertCDPToBlocks(cdpResult: CDPStyleResult): StyleRuleBlock[] {
   const blocks: StyleRuleBlock[] = [];
   let blockId = 0;
@@ -245,7 +220,6 @@ interface StyleRuleBlock {
 export function StyleEditor({
   element,
   remoteMode = false,
-  selector: remoteSelector,
   initialClassName = '',
   initialTextContent = '',
   initialCdpStyles,
@@ -264,11 +238,6 @@ export function StyleEditor({
   const htmlEl = useRef<HTMLElement | null>(null);
   const valueInputRef = useRef<PropertyValueAutocompleteHandle>(null);
 
-  // Generate selector from element directly to avoid timing issues
-  const selector = useMemo(() => {
-    if (remoteMode) return remoteSelector || '';
-    return element ? buildCDPSelector(element) : '';
-  }, [element, remoteMode, remoteSelector]);
 
   // Initialize from remote data (side panel mode)
   useEffect(() => {
@@ -344,36 +313,51 @@ export function StyleEditor({
     }
     setTextContent(directText.trim());
 
-    // Fetch styles via CDP (no fallback - show error if CDP fails)
-    let cancelled = false;
-    setIsLoading(true);
-    setCdpError(null);
-
-    (async () => {
-      if (!selector) {
-        if (!cancelled) {
-          setCdpError('No selector available for this element');
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      const cdpResult = await fetchStylesViaCDP(selector);
-      if (cancelled) return;
-
-      if (!cdpResult) {
-        setCdpError('CDP connection failed. Try closing DevTools or refreshing the page.');
-        setIsLoading(false);
-        return;
-      }
-
-      const cdpBlocks = convertCDPToBlocks(cdpResult);
+    // Use initialCdpStyles if already fetched (from captureElementInfo)
+    // This avoids double CDP requests
+    if (initialCdpStyles) {
+      const cdpBlocks = convertCDPToBlocks(initialCdpStyles);
       setBlocks(cdpBlocks);
       setIsLoading(false);
-    })();
+      return;
+    }
 
-    return () => { cancelled = true; };
-  }, [element, selector, remoteMode]);
+    // Fallback to computed styles if CDP not available
+    if (initialComputedStyles && initialComputedStyles.length > 0) {
+      setBlocks([{
+        id: 'inline',
+        selector: 'element.style',
+        source: '',
+        properties: [],
+        isInline: true,
+      }, {
+        id: 'computed',
+        selector: 'Computed Styles',
+        source: '',
+        properties: initialComputedStyles.map(s => ({
+          property: s.name,
+          value: s.value,
+          priority: '',
+          overridden: false,
+        })),
+        isInline: false,
+      }]);
+      setIsLoading(false);
+      setCdpError('CDP unavailable. Showing computed styles only.');
+      return;
+    }
+
+    // No styles available at all
+    setBlocks([{
+      id: 'inline',
+      selector: 'element.style',
+      source: '',
+      properties: [],
+      isInline: true,
+    }]);
+    setIsLoading(false);
+    setCdpError('No style data available.');
+  }, [element, remoteMode, initialCdpStyles, initialComputedStyles]);
 
   const handleClassNameChange = useCallback((val: string) => {
     console.log('[StyleEditor] Class change:', val, 'remoteMode:', remoteMode);

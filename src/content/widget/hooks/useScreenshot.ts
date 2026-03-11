@@ -32,22 +32,34 @@ function disableHoverState(el: Element): () => void {
   };
 }
 
+// Guard against concurrent captures
+let widgetCaptureInProgress = false;
+
 export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | null>) {
   /** Capture the visible tab (hides widget, waits for paint, captures, restores). */
   const captureRaw = useCallback((): Promise<string> => {
+    // Prevent concurrent captures
+    if (widgetCaptureInProgress) {
+      console.warn('[useScreenshot] Capture already in progress, skipping');
+      return Promise.reject(new Error('Capture already in progress'));
+    }
+    widgetCaptureInProgress = true;
+
     return new Promise((resolve, reject) => {
       const port = portRef.current;
-      if (!port) { reject(new Error('Not connected')); return; }
+      if (!port) {
+        widgetCaptureInProgress = false;
+        reject(new Error('Not connected'));
+        return;
+      }
 
       // Hide all BugShot UI elements and save original styles
-      const elementsToHide: Array<{ el: HTMLElement; original: { display: string; visibility: string } }> = [
-        document.getElementById('bugshot-root'),
-        document.getElementById('bugshot-picked-highlight'),
-        document.getElementById('bugshot-picker-highlight'),
-        document.getElementById('bugshot-picker-label'),
-      ]
-        .filter((el): el is HTMLElement => el !== null)
-        .map((el) => ({ el, original: { display: el.style.display, visibility: el.style.visibility } }));
+      // Use querySelectorAll to find all elements with bugshot- prefix
+      const bugshotElements = document.querySelectorAll('[id^="bugshot-"]');
+      const elementsToHide: Array<{ el: HTMLElement; original: { display: string; visibility: string } }> =
+        Array.from(bugshotElements)
+          .filter((el): el is HTMLElement => el instanceof HTMLElement)
+          .map((el) => ({ el, original: { display: el.style.display, visibility: el.style.visibility } }));
 
       // Use both display:none and visibility:hidden for extra safety
       elementsToHide.forEach(({ el }) => {
@@ -68,7 +80,13 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
             if (message.type === 'SCREENSHOT_CAPTURED') {
               port.onMessage.removeListener(handler);
               show();
+              widgetCaptureInProgress = false;
               resolve(message.dataUrl);
+            } else if (message.type === 'SCREENSHOT_ERROR') {
+              port.onMessage.removeListener(handler);
+              show();
+              widgetCaptureInProgress = false;
+              reject(new Error(message.error || 'Screenshot capture failed'));
             }
           };
 
@@ -78,6 +96,7 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
           setTimeout(() => {
             port.onMessage.removeListener(handler);
             show();
+            widgetCaptureInProgress = false;
             reject(new Error('Screenshot capture timed out'));
           }, 5000);
         });

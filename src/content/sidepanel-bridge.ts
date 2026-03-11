@@ -5,14 +5,28 @@
  */
 
 import type { CSSChange, ElementStyleSnapshot } from '@/shared/types/css-change';
-import type { CDPStyleResult } from '@/shared/types/messages';
 import { cropScreenshotToRect } from '@/shared/utils/screenshot';
-import {
-  buildCDPSelector,
-  generateDisplaySelector,
-} from '@/shared/utils/css-selector';
+import { generateDisplaySelector } from '@/shared/utils/css-selector';
 import { captureSnapshot } from '@/shared/utils/css-snapshot';
 import { diffSnapshots } from '@/shared/utils/css-diff';
+import {
+  createGuidelineElements,
+  updateGuidelines,
+  createInfoPanel,
+  updateInfoPanel,
+  createHighlightOverlay,
+  createPickedHighlight as createPickedHighlightEl,
+  createHoverHighlight,
+  updateHighlightPosition,
+} from '@/shared/utils/picking-visuals';
+import {
+  captureElementInfo as captureElementInfoShared,
+  getElementLabel,
+  getAncestorChain,
+  getDirectChildren,
+} from '@/shared/utils/element-info';
+import type { BreadcrumbData, SerializedBreadcrumbItem } from '@/shared/types/element-info';
+import { STORAGE_KEYS } from '@/shared/constants';
 
 // Direct port connection from side panel (CSS Peeper pattern)
 let sidePanelPort: chrome.runtime.Port | null = null;
@@ -24,8 +38,76 @@ let beforeSnapshotData: ElementStyleSnapshot | null = null;
 let beforeScreenshotDataUrl: string | null = null;
 let pickingOverlay: HTMLDivElement | null = null;
 let highlightOverlay: HTMLDivElement | null = null;
+let guidelinesContainer: HTMLDivElement | null = null;
 let infoPanel: HTMLDivElement | null = null;
 let currentPickedElement: Element | null = null;
+let pickedHighlight: HTMLDivElement | null = null;
+let hoverHighlight: HTMLDivElement | null = null;
+
+// For style reset (Phase 4)
+let originalStyleText: string | null = null;
+
+// Cache for breadcrumb navigation
+let ancestorElements: Element[] = [];
+let childElements: Element[] = [];
+
+// ID prefix for panel-specific elements
+const PANEL_GUIDE_PREFIX = 'bugshot-panel-guide';
+
+// ── Hover highlight functions (same as widget) ──
+function showHoverHighlightOnElement(element: Element) {
+  if (!hoverHighlight) {
+    hoverHighlight = createHoverHighlight('bugshot-panel-hover-highlight');
+    document.documentElement.appendChild(hoverHighlight);
+  }
+
+  const rect = element.getBoundingClientRect();
+  updateHighlightPosition(hoverHighlight, rect, true);
+}
+
+function hideHoverHighlightElement() {
+  if (hoverHighlight) {
+    hoverHighlight.style.display = 'none';
+  }
+}
+
+function removeHoverHighlight() {
+  if (hoverHighlight) {
+    hoverHighlight.remove();
+    hoverHighlight = null;
+  }
+}
+
+// ── Breadcrumb data with element caching (for later lookup) ──
+function getBreadcrumbDataWithCache(element: Element): BreadcrumbData {
+  // Get and cache ancestors
+  ancestorElements = getAncestorChain(element);
+  const ancestors: SerializedBreadcrumbItem[] = ancestorElements.map((el, index) => ({
+    index,
+    label: getElementLabel(el),
+    isCurrentPicked: false,
+    type: 'ancestor' as const,
+  }));
+
+  // Current element
+  const current: SerializedBreadcrumbItem = {
+    index: 0,
+    label: getElementLabel(element),
+    isCurrentPicked: true,
+    type: 'current' as const,
+  };
+
+  // Get and cache children
+  childElements = getDirectChildren(element);
+  const children: SerializedBreadcrumbItem[] = childElements.map((el, index) => ({
+    index,
+    label: getElementLabel(el),
+    isCurrentPicked: false,
+    type: 'child' as const,
+  }));
+
+  return { ancestors, current, children };
+}
 
 function createOverlays() {
   // Main picking overlay (captures clicks)
@@ -41,94 +123,152 @@ function createOverlays() {
     pointer-events: auto;
   `;
 
-  // Highlight overlay (shows hovered element)
-  highlightOverlay = document.createElement('div');
-  highlightOverlay.style.cssText = `
-    position: fixed;
-    pointer-events: none;
-    z-index: 2147483645;
-    border: 2px solid #8b5cf6;
-    background: rgba(139, 92, 246, 0.1);
-    border-radius: 2px;
-    transition: all 0.1s ease;
-    display: none;
-  `;
+  // Highlight overlay (using shared utility - same as widget)
+  highlightOverlay = createHighlightOverlay('bugshot-panel-highlight');
 
-  // Info panel (shows element info)
-  infoPanel = document.createElement('div');
-  infoPanel.style.cssText = `
-    position: fixed;
-    z-index: 2147483647;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 8px 12px;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 11px;
-    color: #374151;
-    pointer-events: none;
-    display: none;
-    max-width: 300px;
-  `;
+  // Guidelines (using shared utility - same as widget)
+  guidelinesContainer = createGuidelineElements(PANEL_GUIDE_PREFIX);
+
+  // Info panel (using shared utility - same as widget)
+  infoPanel = createInfoPanel('bugshot-panel-info');
 
   document.body.appendChild(pickingOverlay);
   document.body.appendChild(highlightOverlay);
+  document.body.appendChild(guidelinesContainer);
   document.body.appendChild(infoPanel);
+  document.documentElement.style.cursor = 'crosshair';
 }
 
 function removeOverlays() {
   pickingOverlay?.remove();
   highlightOverlay?.remove();
+  guidelinesContainer?.remove();
   infoPanel?.remove();
   pickingOverlay = null;
   highlightOverlay = null;
+  guidelinesContainer = null;
   infoPanel = null;
+  document.documentElement.style.cursor = '';
 }
 
 function updateHighlight(element: Element) {
-  if (!highlightOverlay || !infoPanel) return;
+  if (!highlightOverlay) return;
 
   const rect = element.getBoundingClientRect();
 
-  highlightOverlay.style.display = 'block';
-  highlightOverlay.style.left = `${rect.left}px`;
-  highlightOverlay.style.top = `${rect.top}px`;
-  highlightOverlay.style.width = `${rect.width}px`;
-  highlightOverlay.style.height = `${rect.height}px`;
+  // Update highlight box (using shared utility - same as widget)
+  updateHighlightPosition(highlightOverlay, rect, true);
 
-  // Update info panel
-  const tagName = element.tagName.toLowerCase();
-  const id = element.id ? `#${element.id}` : '';
-  const classes = Array.from(element.classList).slice(0, 3).map(c => `.${c}`).join('');
+  // Update guidelines (using shared utility - same as widget)
+  updateGuidelines(rect, PANEL_GUIDE_PREFIX);
 
-  infoPanel.innerHTML = `
-    <div style="font-weight: 600; color: #8b5cf6; margin-bottom: 4px;">
-      ${tagName}${id}${classes}
-    </div>
-    <div style="color: #6b7280;">
-      ${Math.round(rect.width)} × ${Math.round(rect.height)}
-    </div>
-  `;
-  infoPanel.style.display = 'block';
-
-  // Position info panel
-  const panelRect = infoPanel.getBoundingClientRect();
-  let left = rect.left;
-  let top = rect.bottom + 8;
-
-  // Keep within viewport
-  if (left + panelRect.width > window.innerWidth) {
-    left = window.innerWidth - panelRect.width - 8;
-  }
-  if (top + panelRect.height > window.innerHeight) {
-    top = rect.top - panelRect.height - 8;
-  }
-  if (top < 0) top = 8;
-  if (left < 0) left = 8;
-
-  infoPanel.style.left = `${left}px`;
-  infoPanel.style.top = `${top}px`;
+  // Update info panel (using shared utility - same as widget)
+  updateInfoPanel(element, rect, 'bugshot-panel-info');
 }
+
+// Element removal observer
+let elementRemovalObserver: MutationObserver | null = null;
+
+// Create persistent highlight for picked element (using shared utility - same as widget)
+function createPickedHighlight(element: Element) {
+  removePickedHighlight();
+
+  // Use shared utility for consistent styling
+  pickedHighlight = createPickedHighlightEl('bugshot-panel-picked-highlight');
+  document.documentElement.appendChild(pickedHighlight);
+
+  const updatePosition = () => {
+    if (!pickedHighlight || !element.isConnected) {
+      removePickedHighlight();
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    updateHighlightPosition(pickedHighlight, rect, true);
+  };
+  updatePosition();
+
+  // Track scroll/resize
+  window.addEventListener('scroll', updatePosition, true);
+  window.addEventListener('resize', updatePosition);
+
+  // ── Element removal detection (same as widget) ──
+  // Watch for element removal from DOM
+  elementRemovalObserver?.disconnect();
+  elementRemovalObserver = new MutationObserver(() => {
+    if (!element.isConnected) {
+      console.log('[SidePanelBridge] Picked element removed from DOM');
+      // Notify panel that element was removed
+      const message = { type: 'ELEMENT_REMOVED' };
+      if (sidePanelPort) {
+        sidePanelPort.postMessage(message);
+      } else {
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_ELEMENT_REMOVED' });
+      }
+      // Clean up
+      removePickedHighlight();
+      currentPickedElement = null;
+      resetTracking();
+    }
+  });
+  // Observe parent element for child removals
+  const parent = element.parentElement || document.body;
+  elementRemovalObserver.observe(parent, { childList: true, subtree: true });
+
+  // Store cleanup function
+  (pickedHighlight as any)._cleanup = () => {
+    window.removeEventListener('scroll', updatePosition, true);
+    window.removeEventListener('resize', updatePosition);
+    elementRemovalObserver?.disconnect();
+    elementRemovalObserver = null;
+  };
+}
+
+function removePickedHighlight() {
+  if (pickedHighlight) {
+    if ((pickedHighlight as any)._cleanup) {
+      (pickedHighlight as any)._cleanup();
+    }
+    pickedHighlight.remove();
+    pickedHighlight = null;
+  }
+}
+
+/**
+ * Comprehensive cleanup of all panel picking state.
+ * Called when switching from Panel mode to Widget mode to avoid conflicts.
+ */
+function cleanupPanelState() {
+  console.log('[SidePanelBridge] Cleaning up panel state for mode switch');
+
+  // Cancel ongoing picking
+  if (isPickingForPanel) {
+    cancelPicking();
+  }
+
+  // Restore original style before clearing element reference
+  if (originalStyleText !== null && currentPickedElement) {
+    try {
+      (currentPickedElement as HTMLElement).style.cssText = originalStyleText;
+    } catch { /* ignore */ }
+  }
+  originalStyleText = null;
+
+  // Reset tracking state
+  resetTracking();
+
+  // Clear picked element and caches
+  currentPickedElement = null;
+  ancestorElements = [];
+  childElements = [];
+
+  // Remove hover highlight
+  removeHoverHighlight();
+}
+
+// Listen for cleanup events from widget
+window.addEventListener('bugshot-cleanup-panel-state', () => {
+  cleanupPanelState();
+});
 
 function getElementAtPoint(x: number, y: number): Element | null {
   // Temporarily hide overlays to get element underneath
@@ -146,150 +286,26 @@ function getElementAtPoint(x: number, y: number): Element | null {
   return element;
 }
 
-// Fetch styles via CDP
-async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: 'GET_ELEMENT_STYLES', selector },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn('[SidePanelBridge] CDP request failed:', chrome.runtime.lastError.message);
-          resolve(null);
-          return;
-        }
-        if (response?.success && response.styles) {
-          resolve(response.styles as CDPStyleResult);
-        } else {
-          console.warn('[SidePanelBridge] CDP fetch failed:', response?.error);
-          resolve(null);
-        }
-      }
-    );
-  });
-}
-
-// Collect CSS custom properties (tokens) from the page
-function collectPageTokens(): Array<{ name: string; value: string }> {
-  const tokens = new Map<string, string>();
-
-  function extractFromRules(rules: CSSRuleList) {
-    for (let r = 0; r < rules.length; r++) {
-      const rule = rules[r];
-      try {
-        if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
-          extractFromRules((rule as CSSGroupingRule).cssRules);
-        }
-      } catch { /* can't access nested rules */ }
-
-      if (!(rule instanceof CSSStyleRule)) continue;
-
-      for (let p = 0; p < rule.style.length; p++) {
-        const prop = rule.style.item(p);
-        if (prop.startsWith('--')) {
-          tokens.set(prop, rule.style.getPropertyValue(prop).trim());
-        }
-      }
-    }
-  }
-
-  // Collect from all stylesheets
-  for (let s = 0; s < document.styleSheets.length; s++) {
-    let rules: CSSRuleList;
-    try { rules = document.styleSheets[s].cssRules; } catch { continue; }
-    try { extractFromRules(rules); } catch { /* skip */ }
-  }
-
-  // Also collect resolved values from :root via getComputedStyle
-  const rootStyle = getComputedStyle(document.documentElement);
-  for (const [name] of tokens) {
-    const resolved = rootStyle.getPropertyValue(name).trim();
-    if (resolved) tokens.set(name, resolved);
-  }
-
-  // Collect from inline style of documentElement
-  const root = document.documentElement;
-  for (let i = 0; i < root.style.length; i++) {
-    const prop = root.style.item(i);
-    if (prop.startsWith('--')) {
-      tokens.set(prop, root.style.getPropertyValue(prop).trim());
-    }
-  }
-
-  return Array.from(tokens.entries()).map(([name, value]) => ({ name, value }));
-}
-
-// Get computed styles as fallback
-function getComputedStylesSimple(element: Element): Array<{ name: string; value: string }> {
-  const computed = window.getComputedStyle(element);
-  const important = [
-    'display', 'position', 'width', 'height', 'padding', 'margin',
-    'background-color', 'color', 'font-size', 'font-weight', 'border',
-    'border-radius', 'flex', 'grid', 'gap', 'opacity', 'z-index'
-  ];
-
-  const styles: Array<{ name: string; value: string }> = [];
-  for (const prop of important) {
-    const value = computed.getPropertyValue(prop);
-    if (value && value !== 'none' && value !== 'normal' && value !== 'auto') {
-      styles.push({ name: prop, value });
-    }
-  }
-  return styles;
-}
-
-interface ElementInfo {
-  cssChange: Partial<CSSChange>;
-  className: string;
-  textContent: string;
-  cdpSelector: string;
-  computedStyles: Array<{ name: string; value: string }>;
-  cdpStyles: CDPStyleResult | null;
-  pageTokens: Array<{ name: string; value: string }>;
-}
-
-async function captureElementInfo(element: Element): Promise<ElementInfo> {
-  const selector = generateDisplaySelector(element);
-  const cdpSelector = buildCDPSelector(element);
-
-  // Get class name and text content
-  let className = '';
-  if (typeof element.className === 'string') {
-    className = element.className.trim();
-  }
-
-  let textContent = '';
-  for (let i = 0; i < element.childNodes.length; i++) {
-    if (element.childNodes[i].nodeType === Node.TEXT_NODE) {
-      textContent += element.childNodes[i].textContent;
-    }
-  }
-  textContent = textContent.trim();
-
-  // Get computed styles (simple fallback)
-  const computedStyles = getComputedStylesSimple(element);
-
-  // Try to get CDP styles
-  const cdpStyles = await fetchStylesViaCDP(cdpSelector);
-
-  // Collect page tokens (CSS custom properties)
-  const pageTokens = collectPageTokens();
+// Use shared captureElementInfo and add cssChange wrapper
+async function captureElementInfo(element: Element) {
+  const info = await captureElementInfoShared(element);
 
   return {
     cssChange: {
       id: crypto.randomUUID(),
       timestamp: Date.now(),
-      selector,
-      elementDescription: selector,
+      selector: info.selector,
+      elementDescription: info.selector,
       url: window.location.href,
       properties: [],
-      status: 'pending',
+      status: 'pending' as const,
     },
-    className,
-    textContent,
-    cdpSelector,
-    computedStyles,
-    cdpStyles,
-    pageTokens,
+    className: info.className,
+    textContent: info.textContent,
+    cdpSelector: info.cdpSelector,
+    computedStyles: info.computedStyles,
+    cdpStyles: info.cdpStyles,
+    pageTokens: info.pageTokens,
   };
 }
 
@@ -320,6 +336,12 @@ function startPicking() {
       // Save reference to picked element for later style changes
       currentPickedElement = element;
 
+      // Create persistent highlight (same as widget)
+      createPickedHighlight(element);
+
+      // Save original style for reset functionality (Phase 4)
+      originalStyleText = (element as HTMLElement).style.cssText;
+
       const elementInfo = await captureElementInfo(element);
 
       // Capture before screenshot and CSS snapshot (uses shared utilities - same as widget)
@@ -327,17 +349,23 @@ function startPicking() {
       beforeScreenshotDataUrl = await captureElementScreenshot(element);
       const selector = beforeSnapshotData?.selector || generateDisplaySelector(element);
 
+      // Get breadcrumb data for panel (Phase 2)
+      const breadcrumbData = getBreadcrumbDataWithCache(element);
+
       console.log('[SidePanelBridge] Element captured with before screenshot:', {
         selector,
         hasBeforeScreenshot: !!beforeScreenshotDataUrl,
         hasCdpStyles: !!elementInfo.cdpStyles,
+        breadcrumbAncestors: breadcrumbData.ancestors.length,
+        breadcrumbChildren: breadcrumbData.children.length,
       });
 
-      // Include before screenshot in the message
+      // Include before screenshot and breadcrumb data in the message
       const message = {
         type: 'ELEMENT_PICKED',
         ...elementInfo,
         screenshotBefore: beforeScreenshotDataUrl,
+        breadcrumbData,
       };
 
       if (sidePanelPort) {
@@ -345,7 +373,12 @@ function startPicking() {
         sidePanelPort.postMessage(message);
       } else {
         console.log('[SidePanelBridge] Sending via service worker relay');
-        chrome.runtime.sendMessage({ type: 'SIDEPANEL_ELEMENT_PICKED', ...elementInfo, screenshotBefore: beforeScreenshotDataUrl });
+        chrome.runtime.sendMessage({
+          type: 'SIDEPANEL_ELEMENT_PICKED',
+          ...elementInfo,
+          screenshotBefore: beforeScreenshotDataUrl,
+          breadcrumbData,
+        });
       }
     } else {
       const message = { type: 'PICKING_CANCELLED' };
@@ -389,7 +422,16 @@ function cancelPicking() {
 }
 
 // ── Screenshot capture for element (uses shared cropping utility) ──
+let screenshotInProgress = false;
+
 async function captureElementScreenshot(element: Element): Promise<string | null> {
+  // Prevent concurrent screenshot captures
+  if (screenshotInProgress) {
+    console.warn('[SidePanelBridge] Screenshot capture already in progress, skipping');
+    return null;
+  }
+  screenshotInProgress = true;
+
   try {
     // Get element rect before any scrolling
     let rect = element.getBoundingClientRect();
@@ -408,6 +450,24 @@ async function captureElementScreenshot(element: Element): Promise<string | null
       rect = element.getBoundingClientRect();
     }
 
+    // Hide ALL BugShot UI elements before capturing screenshot
+    const bugshotElements = document.querySelectorAll('[id^="bugshot-"]');
+    const elementsToRestore: Array<{ el: HTMLElement; display: string; visibility: string }> = [];
+    bugshotElements.forEach((el) => {
+      if (el instanceof HTMLElement) {
+        elementsToRestore.push({
+          el,
+          display: el.style.display,
+          visibility: el.style.visibility,
+        });
+        el.style.display = 'none';
+        el.style.visibility = 'hidden';
+      }
+    });
+
+    // Wait for repaint
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
     // Request full page screenshot from service worker
     const fullPageDataUrl = await new Promise<string | null>((resolve) => {
       chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT', tabId: 0 }, (response) => {
@@ -418,6 +478,12 @@ async function captureElementScreenshot(element: Element): Promise<string | null
           resolve(response.dataUrl);
         }
       });
+    });
+
+    // Restore all BugShot UI elements
+    elementsToRestore.forEach(({ el, display, visibility }) => {
+      el.style.display = display;
+      el.style.visibility = visibility;
     });
 
     if (!fullPageDataUrl) {
@@ -441,6 +507,8 @@ async function captureElementScreenshot(element: Element): Promise<string | null
   } catch (error) {
     console.warn('[SidePanelBridge] Screenshot capture error:', error);
     return null;
+  } finally {
+    screenshotInProgress = false;
   }
 }
 
@@ -482,6 +550,7 @@ function captureAfterAndDiff(element: Element): CSSChange | null {
 function resetTracking() {
   beforeSnapshotData = null;
   beforeScreenshotDataUrl = null;
+  removePickedHighlight();
 }
 
 // Apply style changes from side panel
@@ -732,7 +801,101 @@ export function initSidePanelBridge() {
       case 'RESET_TRACKING':
         resetTracking();
         currentPickedElement = null;
+        removeHoverHighlight();
         sendResponse({ success: true });
+        break;
+
+      case 'CLEANUP_PANEL_STATE':
+        // Called by widget before starting picking to ensure no conflicts
+        cleanupPanelState();
+        sendResponse({ success: true });
+        break;
+
+      // ── Breadcrumb operations ──
+      case 'GET_BREADCRUMB_DATA': {
+        if (!currentPickedElement) {
+          sendResponse({ success: false, error: 'No element selected' });
+        } else {
+          const data = getBreadcrumbDataWithCache(currentPickedElement);
+          sendResponse({ success: true, data });
+        }
+        break;
+      }
+
+      case 'SELECT_BREADCRUMB_ELEMENT': {
+        const { elementType, index } = message;
+        let targetElement: Element | null = null;
+
+        if (elementType === 'ancestor' && ancestorElements[index]) {
+          targetElement = ancestorElements[index];
+        } else if (elementType === 'child' && childElements[index]) {
+          targetElement = childElements[index];
+        }
+
+        if (!targetElement) {
+          sendResponse({ success: false, error: 'Element not found' });
+          break;
+        }
+
+        // Update picked element and highlight
+        currentPickedElement = targetElement;
+        createPickedHighlight(targetElement);
+
+        // Capture new before snapshot
+        captureBefore(targetElement);
+        originalStyleText = (targetElement as HTMLElement).style.cssText;
+
+        // Capture before screenshot async
+        (async () => {
+          beforeScreenshotDataUrl = await captureElementScreenshot(targetElement!);
+          const elementInfo = await captureElementInfo(targetElement!);
+          const breadcrumbData = getBreadcrumbDataWithCache(targetElement!);
+
+          sendResponse({
+            success: true,
+            elementInfo,
+            breadcrumbData,
+            screenshotBefore: beforeScreenshotDataUrl,
+          });
+        })();
+        return true; // Will respond asynchronously
+      }
+
+      case 'SHOW_HOVER_HIGHLIGHT': {
+        const { elementType, index } = message;
+        let targetElement: Element | null = null;
+
+        if (elementType === 'ancestor' && ancestorElements[index]) {
+          targetElement = ancestorElements[index];
+        } else if (elementType === 'child' && childElements[index]) {
+          targetElement = childElements[index];
+        }
+
+        if (targetElement) {
+          showHoverHighlightOnElement(targetElement);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Element not found' });
+        }
+        break;
+      }
+
+      case 'HIDE_HOVER_HIGHLIGHT':
+        hideHoverHighlightElement();
+        sendResponse({ success: true });
+        break;
+
+      // ── Style reset (Phase 4) ──
+      case 'RESTORE_ORIGINAL_STYLE':
+        if (!currentPickedElement) {
+          sendResponse({ success: false, error: 'No element selected' });
+        } else if (originalStyleText === null) {
+          sendResponse({ success: false, error: 'No original style saved' });
+        } else {
+          (currentPickedElement as HTMLElement).style.cssText = originalStyleText;
+          console.log('[SidePanelBridge] Restored original style:', originalStyleText);
+          sendResponse({ success: true });
+        }
         break;
 
       default:
@@ -740,5 +903,16 @@ export function initSidePanelBridge() {
         return false;
     }
     return true;
+  });
+
+  // Listen for display mode changes to cleanup panel state when switching to widget
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && STORAGE_KEYS.DISPLAY_MODE in changes) {
+      const newMode = changes[STORAGE_KEYS.DISPLAY_MODE]?.newValue;
+      if (newMode === 'widget') {
+        console.log('[SidePanelBridge] Mode switched to widget, cleaning up panel state');
+        cleanupPanelState();
+      }
+    }
   });
 }
