@@ -425,11 +425,11 @@ export function WidgetRoot() {
       });
 
       // Request service worker to open side panel
-      const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_ID' });
-      if (response?.tabId) {
-        // Service worker will handle opening the side panel
-        // Widget will be hidden via storage change listener in content-script.ts
+      const response = await chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
+      if (!response?.success) {
+        console.warn('[WidgetRoot] Failed to open side panel:', response?.error);
       }
+      // Widget will be hidden via storage change listener in content-script.ts
     } catch (error) {
       console.warn('[WidgetRoot] Failed to switch to panel mode:', error);
     }

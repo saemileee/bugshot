@@ -4,6 +4,7 @@ import { PropertyNameInput } from './PropertyNameInput';
 import { PropertyValueAutocomplete, PropertyValueAutocompleteHandle } from './PropertyValueAutocomplete';
 import type { CDPStyleResult } from '@/shared/types/messages';
 import { cn } from '@/shared/utils/cn';
+import { buildCDPSelector } from '@/shared/utils/css-selector';
 
 interface StyleEditorProps {
   element?: Element;
@@ -16,50 +17,6 @@ interface StyleEditorProps {
   initialComputedStyles?: Array<{ name: string; value: string }>;
   pageTokens?: Array<{ name: string; value: string }>;
   onRemoteChange?: (change: { type: 'class' | 'text' | 'style'; property?: string; value: string }) => void;
-}
-
-/* ── Selector builder for CDP ── */
-
-function escapeCSSIdentifier(str: string): string {
-  return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
-}
-
-function isSafeClassName(className: string): boolean {
-  if (className.includes('[')) return false;
-  if (className.includes('(')) return false;
-  if (className.length > 40) return false;
-  if (/^[!@#$%^&*()+=]/.test(className)) return false;
-  return true;
-}
-
-function buildSelectorForElement(el: Element): string {
-  if (el === document.documentElement) return 'html';
-  if (el === document.body) return 'body';
-
-  const parts: string[] = [];
-  let current: Element | null = el;
-
-  while (current && current !== document.body && parts.length < 5) {
-    let s = current.tagName.toLowerCase();
-    if (current.id) {
-      parts.unshift('#' + escapeCSSIdentifier(current.id));
-      break;
-    }
-    if (current.className && typeof current.className === 'string') {
-      const safeClasses = current.className
-        .trim()
-        .split(/\s+/)
-        .filter(isSafeClassName)
-        .slice(0, 2)
-        .map(escapeCSSIdentifier)
-        .join('.');
-      if (safeClasses) s += '.' + safeClasses;
-    }
-    parts.unshift(s);
-    current = current.parentElement;
-  }
-
-  return parts.length > 0 ? parts.join(' > ') : el.tagName.toLowerCase();
 }
 
 /* ── Shorthand property grouping ── */
@@ -310,7 +267,7 @@ export function StyleEditor({
   // Generate selector from element directly to avoid timing issues
   const selector = useMemo(() => {
     if (remoteMode) return remoteSelector || '';
-    return element ? buildSelectorForElement(element) : '';
+    return element ? buildCDPSelector(element) : '';
   }, [element, remoteMode, remoteSelector]);
 
   // Initialize from remote data (side panel mode)

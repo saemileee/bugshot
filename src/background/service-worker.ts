@@ -98,6 +98,12 @@ chrome.storage.local.get(STORAGE_KEYS.WIDGET_VISIBLE, (result) => {
 // Note: sidePanel.open() requires a user gesture, so we cannot auto-open
 // when display mode changes. The user must click the extension icon to open the panel.
 
+// Ensure side panel is always enabled on service worker startup
+// (fixes issue where setOptions({ enabled: false }) may have disabled it)
+chrome.sidePanel.setOptions({ enabled: true }).catch(() => {
+  // Ignore errors during startup
+});
+
 // Handle extension icon click based on display mode
 chrome.action.onClicked.addListener(async (tab) => {
   const result = await chrome.storage.local.get([STORAGE_KEYS.DISPLAY_MODE, STORAGE_KEYS.WIDGET_VISIBLE]);
@@ -105,6 +111,8 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   if (displayMode === 'panel') {
     // Open side panel for the current tab
+    // Note: Closing must be done by user via panel UI (X button) or Chrome UI
+    // Using setOptions({ enabled: false }) disables the panel globally and breaks Chrome menu
     if (tab.id) {
       try {
         await chrome.sidePanel.open({ tabId: tab.id });

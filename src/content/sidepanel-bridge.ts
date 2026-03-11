@@ -4,13 +4,24 @@
  * for operations that require direct DOM access (element picking, region selection, etc.)
  */
 
-import type { CSSChange } from '@/shared/types/css-change';
+import type { CSSChange, ElementStyleSnapshot } from '@/shared/types/css-change';
 import type { CDPStyleResult } from '@/shared/types/messages';
+import { cropScreenshotToRect } from '@/shared/utils/screenshot';
+import {
+  buildCDPSelector,
+  generateDisplaySelector,
+} from '@/shared/utils/css-selector';
+import { captureSnapshot } from '@/shared/utils/css-snapshot';
+import { diffSnapshots } from '@/shared/utils/css-diff';
 
 // Direct port connection from side panel (CSS Peeper pattern)
 let sidePanelPort: chrome.runtime.Port | null = null;
 
 let isPickingForPanel = false;
+
+// CSS tracking state (uses same snapshot format as widget)
+let beforeSnapshotData: ElementStyleSnapshot | null = null;
+let beforeScreenshotDataUrl: string | null = null;
 let pickingOverlay: HTMLDivElement | null = null;
 let highlightOverlay: HTMLDivElement | null = null;
 let infoPanel: HTMLDivElement | null = null;
@@ -135,67 +146,6 @@ function getElementAtPoint(x: number, y: number): Element | null {
   return element;
 }
 
-function escapeCSSIdentifier(str: string): string {
-  return str.replace(/([[\]!/:@.#()'"*+,;\\<=>^`{|}~])/g, '\\$1');
-}
-
-function isSafeClassName(className: string): boolean {
-  if (className.includes('[')) return false;
-  if (className.includes('(')) return false;
-  if (className.length > 40) return false;
-  if (/^[!@#$%^&*()+=]/.test(className)) return false;
-  return true;
-}
-
-function generateSelector(element: Element): string {
-  const tagName = element.tagName.toLowerCase();
-
-  if (element.id) {
-    return `${tagName}#${element.id}`;
-  }
-
-  const classes = Array.from(element.classList)
-    .filter(c => !c.startsWith('bugshot'))
-    .slice(0, 2);
-
-  if (classes.length > 0) {
-    return `${tagName}.${classes.join('.')}`;
-  }
-
-  return tagName;
-}
-
-// Build a more specific selector for CDP
-function buildCDPSelector(el: Element): string {
-  if (el === document.documentElement) return 'html';
-  if (el === document.body) return 'body';
-
-  const parts: string[] = [];
-  let current: Element | null = el;
-
-  while (current && current !== document.body && parts.length < 5) {
-    let s = current.tagName.toLowerCase();
-    if (current.id) {
-      parts.unshift('#' + escapeCSSIdentifier(current.id));
-      break;
-    }
-    if (current.className && typeof current.className === 'string') {
-      const safeClasses = current.className
-        .trim()
-        .split(/\s+/)
-        .filter(isSafeClassName)
-        .slice(0, 2)
-        .map(escapeCSSIdentifier)
-        .join('.');
-      if (safeClasses) s += '.' + safeClasses;
-    }
-    parts.unshift(s);
-    current = current.parentElement;
-  }
-
-  return parts.length > 0 ? parts.join(' > ') : el.tagName.toLowerCase();
-}
-
 // Fetch styles via CDP
 async function fetchStylesViaCDP(selector: string): Promise<CDPStyleResult | null> {
   return new Promise((resolve) => {
@@ -298,7 +248,7 @@ interface ElementInfo {
 }
 
 async function captureElementInfo(element: Element): Promise<ElementInfo> {
-  const selector = generateSelector(element);
+  const selector = generateDisplaySelector(element);
   const cdpSelector = buildCDPSelector(element);
 
   // Get class name and text content
@@ -371,20 +321,31 @@ function startPicking() {
       currentPickedElement = element;
 
       const elementInfo = await captureElementInfo(element);
-      console.log('[SidePanelBridge] Element captured:', {
-        selector: elementInfo.cssChange?.selector,
-        hasClassName: !!elementInfo.className,
+
+      // Capture before screenshot and CSS snapshot (uses shared utilities - same as widget)
+      captureBefore(element);
+      beforeScreenshotDataUrl = await captureElementScreenshot(element);
+      const selector = beforeSnapshotData?.selector || generateDisplaySelector(element);
+
+      console.log('[SidePanelBridge] Element captured with before screenshot:', {
+        selector,
+        hasBeforeScreenshot: !!beforeScreenshotDataUrl,
         hasCdpStyles: !!elementInfo.cdpStyles,
-        computedStylesCount: elementInfo.computedStyles?.length,
       });
-      // Send via direct port if available, fallback to runtime.sendMessage
-      const message = { type: 'ELEMENT_PICKED', ...elementInfo };
+
+      // Include before screenshot in the message
+      const message = {
+        type: 'ELEMENT_PICKED',
+        ...elementInfo,
+        screenshotBefore: beforeScreenshotDataUrl,
+      };
+
       if (sidePanelPort) {
         console.log('[SidePanelBridge] Sending via direct port');
         sidePanelPort.postMessage(message);
       } else {
         console.log('[SidePanelBridge] Sending via service worker relay');
-        chrome.runtime.sendMessage({ type: 'SIDEPANEL_ELEMENT_PICKED', ...elementInfo });
+        chrome.runtime.sendMessage({ type: 'SIDEPANEL_ELEMENT_PICKED', ...elementInfo, screenshotBefore: beforeScreenshotDataUrl });
       }
     } else {
       const message = { type: 'PICKING_CANCELLED' };
@@ -425,6 +386,102 @@ function cancelPicking() {
   if (!isPickingForPanel) return;
   isPickingForPanel = false;
   removeOverlays();
+}
+
+// ── Screenshot capture for element (uses shared cropping utility) ──
+async function captureElementScreenshot(element: Element): Promise<string | null> {
+  try {
+    // Get element rect before any scrolling
+    let rect = element.getBoundingClientRect();
+    const isInViewport = (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= window.innerHeight &&
+      rect.right <= window.innerWidth
+    );
+
+    // Scroll into view if needed
+    if (!isInViewport) {
+      element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Update rect after scroll
+      rect = element.getBoundingClientRect();
+    }
+
+    // Request full page screenshot from service worker
+    const fullPageDataUrl = await new Promise<string | null>((resolve) => {
+      chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT', tabId: 0 }, (response) => {
+        if (chrome.runtime.lastError || !response?.dataUrl) {
+          console.warn('[SidePanelBridge] Screenshot capture failed');
+          resolve(null);
+        } else {
+          resolve(response.dataUrl);
+        }
+      });
+    });
+
+    if (!fullPageDataUrl) {
+      return null;
+    }
+
+    // Use shared cropping utility (same as widget)
+    const croppedDataUrl = await cropScreenshotToRect(fullPageDataUrl, {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    });
+
+    console.log('[SidePanelBridge] Cropped screenshot to element bounds:', {
+      element: element.tagName,
+      rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    });
+
+    return croppedDataUrl;
+  } catch (error) {
+    console.warn('[SidePanelBridge] Screenshot capture error:', error);
+    return null;
+  }
+}
+
+// ── CSS tracking (uses shared utilities - same as widget) ──
+
+function captureBefore(element: Element) {
+  beforeSnapshotData = captureSnapshot(element);
+  console.log('[SidePanelBridge] Captured before snapshot for:', beforeSnapshotData.selector);
+}
+
+function captureAfterAndDiff(element: Element): CSSChange | null {
+  if (!beforeSnapshotData) {
+    console.warn('[SidePanelBridge] No before snapshot to compare');
+    return null;
+  }
+
+  const afterSnapshot = captureSnapshot(element);
+  const properties = diffSnapshots(beforeSnapshotData, afterSnapshot);
+
+  // Reset tracking state
+  const selector = beforeSnapshotData.selector;
+  beforeSnapshotData = null;
+
+  if (properties.length === 0) {
+    return null;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    selector,
+    elementDescription: selector,
+    url: afterSnapshot.url,
+    properties,
+    status: 'pending',
+  };
+}
+
+function resetTracking() {
+  beforeSnapshotData = null;
+  beforeScreenshotDataUrl = null;
 }
 
 // Apply style changes from side panel
@@ -646,6 +703,36 @@ export function initSidePanelBridge() {
         } else {
           sendResponse({ success: false, error: 'No change data provided' });
         }
+        break;
+
+      case 'CAPTURE_AFTER': {
+        // Capture after screenshot and CSS diff, return the complete change
+        (async () => {
+          if (!currentPickedElement) {
+            sendResponse({ success: false, error: 'No element selected' });
+            return;
+          }
+
+          const afterScreenshot = await captureElementScreenshot(currentPickedElement);
+          const cssChange = captureAfterAndDiff(currentPickedElement);
+
+          sendResponse({
+            success: true,
+            screenshotBefore: beforeScreenshotDataUrl,
+            screenshotAfter: afterScreenshot,
+            cssChange,
+          });
+
+          // Reset state
+          beforeScreenshotDataUrl = null;
+        })();
+        return true; // Will respond asynchronously
+      }
+
+      case 'RESET_TRACKING':
+        resetTracking();
+        currentPickedElement = null;
+        sendResponse({ success: true });
         break;
 
       default:

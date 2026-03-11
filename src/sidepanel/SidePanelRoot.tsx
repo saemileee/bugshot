@@ -8,9 +8,11 @@ import { SubmitPanel } from '@/content/widget/components/SubmitPanel';
 import { Button } from '@/content/widget/components/ui/button';
 import { StyleEditor } from '@/content/widget/components/StyleEditor';
 import { useSWMessaging } from '@/content/widget/hooks/useSWMessaging';
+import { useDraftPersistence, clearDraft } from '@/content/widget/hooks/useDraftPersistence';
 import { STORAGE_KEYS } from '@/shared/constants';
 import type { ExtensionMessage, CDPStyleResult } from '@/shared/types/messages';
 import type { CSSChange } from '@/shared/types/css-change';
+import type { ToolbarTab } from '@/content/widget/components/FloatingWidget';
 
 type Tab = 'capture' | 'settings';
 
@@ -105,7 +107,7 @@ export function SidePanelRoot() {
         const change = msg.cssChange as Partial<CSSChange>;
         const elementData = {
           selector: change.selector || 'element',
-          screenshotBefore: undefined,
+          screenshotBefore: (msg as any).screenshotBefore || undefined,
           className: (msg as any).className || '',
           textContent: (msg as any).textContent || '',
           cdpStyles: (msg as any).cdpStyles || null,
@@ -149,10 +151,45 @@ export function SidePanelRoot() {
     const handleActivated = (activeInfo: chrome.tabs.TabActiveInfo) => {
       console.log('[SidePanel] Tab activated:', activeInfo.tabId);
       setCurrentTabId(activeInfo.tabId);
+      // Reset editing state when tab changes
+      setPendingElement(null);
+      setEditNote('');
     };
     chrome.tabs.onActivated.addListener(handleActivated);
     return () => chrome.tabs.onActivated.removeListener(handleActivated);
   }, []);
+
+  // Map side panel tab to toolbar tab for draft persistence
+  const toolbarTab: ToolbarTab = activeTab === 'capture' ? 'changes' : 'settings';
+
+  // Draft persistence - syncs with widget mode
+  useDraftPersistence({
+    screenshots,
+    description,
+    changes,
+    recordingId,
+    recordingDataUrl,
+    recordingSize,
+    recordingMimeType,
+    editNote,
+    activeTab: toolbarTab,
+    showPreview,
+    isRecording,
+    externalTabId: currentTabId,
+    onRestore: (draft) => {
+      setScreenshots(draft.screenshots);
+      setDescription(draft.description);
+      setChanges(draft.changes);
+      setRecordingId(draft.recordingId);
+      setRecordingDataUrl(draft.recordingDataUrl);
+      setRecordingSize(draft.recordingSize);
+      setRecordingMimeType(draft.recordingMimeType);
+      setEditNote(draft.editNote);
+      // Map toolbar tab back to side panel tab
+      setActiveTab(draft.activeTab === 'settings' ? 'settings' : 'capture');
+      setShowPreview(draft.showPreview);
+    },
+  });
 
 
   // Check platform connection status
@@ -286,32 +323,103 @@ export function SidePanelRoot() {
     }
   }, [isRecording, sendMessage, currentTabId]);
 
-  // Confirm pending element as a CSS change
-  const handleConfirmElement = useCallback(() => {
-    if (!pendingElement) return;
+  // Confirm pending element as a CSS change (captures after screenshot and CSS diff)
+  const handleConfirmElement = useCallback(async () => {
+    if (!pendingElement || !currentTabId) return;
 
-    const change: CSSChange = {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      selector: pendingElement.selector,
-      elementDescription: pendingElement.selector,
-      url: '', // Will be filled by content script or on submit
-      properties: [],
-      description: editNote.trim() || undefined,
-      screenshotBefore: pendingElement.screenshotBefore,
-      status: 'pending',
-    };
+    const note = editNote.trim();
 
-    setChanges(prev => [...prev, change]);
+    try {
+      // Request after screenshot and CSS diff from content script
+      const response = await new Promise<{
+        success: boolean;
+        screenshotBefore?: string;
+        screenshotAfter?: string;
+        cssChange?: CSSChange;
+        error?: string;
+      }>((resolve) => {
+        chrome.tabs.sendMessage(currentTabId, { type: 'CAPTURE_AFTER' }, (res) => {
+          if (chrome.runtime.lastError) {
+            console.warn('[SidePanel] CAPTURE_AFTER failed:', chrome.runtime.lastError.message);
+            resolve({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            resolve(res || { success: false });
+          }
+        });
+      });
+
+      if (response.success && response.cssChange) {
+        // Use CSS change from content script with screenshots
+        const change: CSSChange = {
+          ...response.cssChange,
+          screenshotBefore: response.screenshotBefore ?? pendingElement.screenshotBefore,
+          screenshotAfter: response.screenshotAfter,
+          description: note || undefined,
+        };
+        setChanges(prev => [...prev, change]);
+      } else if (response.success) {
+        // No CSS changes detected, but we can still add a note-only change
+        if (note) {
+          const change: CSSChange = {
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            selector: pendingElement.selector,
+            elementDescription: pendingElement.selector,
+            url: window.location?.href || '',
+            properties: [],
+            description: note,
+            screenshotBefore: response.screenshotBefore ?? pendingElement.screenshotBefore,
+            screenshotAfter: response.screenshotAfter,
+            status: 'pending',
+          };
+          setChanges(prev => [...prev, change]);
+        }
+      } else {
+        // Fallback: create change without screenshot/diff
+        console.warn('[SidePanel] CAPTURE_AFTER returned error, using fallback');
+        const change: CSSChange = {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          selector: pendingElement.selector,
+          elementDescription: pendingElement.selector,
+          url: '',
+          properties: [],
+          description: note || undefined,
+          screenshotBefore: pendingElement.screenshotBefore,
+          status: 'pending',
+        };
+        setChanges(prev => [...prev, change]);
+      }
+    } catch (error) {
+      console.error('[SidePanel] handleConfirmElement error:', error);
+      // Fallback
+      const change: CSSChange = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        selector: pendingElement.selector,
+        elementDescription: pendingElement.selector,
+        url: '',
+        properties: [],
+        description: note || undefined,
+        screenshotBefore: pendingElement.screenshotBefore,
+        status: 'pending',
+      };
+      setChanges(prev => [...prev, change]);
+    }
+
     setPendingElement(null);
     setEditNote('');
-  }, [pendingElement, editNote]);
+  }, [pendingElement, editNote, currentTabId]);
 
   // Cancel pending element editing
   const handleCancelElement = useCallback(() => {
     setPendingElement(null);
     setEditNote('');
-  }, []);
+    // Reset tracking in content script
+    if (currentTabId) {
+      chrome.tabs.sendMessage(currentTabId, { type: 'RESET_TRACKING' }).catch(() => {});
+    }
+  }, [currentTabId]);
 
   const handleClearRecording = useCallback(() => {
     if (recordingId) {
@@ -340,7 +448,9 @@ export function SidePanelRoot() {
     setPendingElement(null);
     setEditNote('');
     setScreenshotError(null);
-  }, [recordingId, sendMessage]);
+    // Clear saved draft from storage
+    if (currentTabId) clearDraft(currentTabId);
+  }, [recordingId, sendMessage, currentTabId]);
 
   const handleRemoveChange = useCallback((id: string) => {
     setChanges(prev => prev.filter(c => c.id !== id));
@@ -371,7 +481,9 @@ export function SidePanelRoot() {
     setShowPreview(false);
     setPendingElement(null);
     setEditNote('');
-  }, []);
+    // Clear saved draft from storage
+    if (currentTabId) clearDraft(currentTabId);
+  }, [currentTabId]);
 
   const isEditing = !!pendingElement;
   const hasContent = screenshots.length > 0 || !!description.trim() || changes.length > 0 || !!recordingId;
@@ -403,7 +515,7 @@ export function SidePanelRoot() {
                 className="flex-1"
                 onClick={handleConfirmElement}
               >
-                Add Issue
+                Confirm Style & Write Issue
                 <ArrowRight className="w-3 h-3" />
               </Button>
             </div>

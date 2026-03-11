@@ -49,6 +49,13 @@ const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
 let hubInitialized = false;
 
 /**
+ * Check if side panel is currently open (has connected ports)
+ */
+export function isSidePanelOpen(): boolean {
+  return sidePanelPorts.size > 0;
+}
+
+/**
  * Clean up CDP session for a specific tab (called on tab close)
  */
 export function cleanupCDPSession(tabId: number) {
@@ -143,6 +150,7 @@ export function initializeMessagingHub() {
           computedStyles: message.computedStyles,
           cdpStyles: message.cdpStyles,
           pageTokens: message.pageTokens,
+          screenshotBefore: message.screenshotBefore,
         });
       }
       sendResponse({ success: true });
@@ -366,6 +374,22 @@ function handleOneShotMessage(
       // Return the tab ID of the sender
       const tabId = _sender.tab?.id;
       sendResponse({ tabId: tabId ?? null });
+      break;
+    }
+
+    case 'OPEN_SIDE_PANEL': {
+      // Open side panel for the sender's tab
+      const tabId = _sender.tab?.id;
+      if (tabId) {
+        chrome.sidePanel.open({ tabId })
+          .then(() => sendResponse({ success: true }))
+          .catch((error) => {
+            console.warn('[Hub] Failed to open side panel:', error);
+            sendResponse({ success: false, error: (error as Error).message });
+          });
+      } else {
+        sendResponse({ success: false, error: 'No tab ID' });
+      }
       break;
     }
 

@@ -5,6 +5,7 @@ export type ExtensionMessage =
   // Tab utilities
   | { type: 'GET_TAB_ID' }
   | { type: 'GET_RECORDING_STATUS' }
+  | { type: 'OPEN_SIDE_PANEL' }
 
   // Screenshot (Content Script <-> Service Worker)
   | { type: 'CAPTURE_SCREENSHOT'; tabId: number }

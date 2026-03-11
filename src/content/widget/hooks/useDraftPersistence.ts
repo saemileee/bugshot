@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import type { ScreenshotData } from '../WidgetRoot';
 import type { CSSChange } from '@/shared/types/css-change';
 import type { ToolbarTab } from '../components/FloatingWidget';
 
-interface DraftState {
+export interface DraftState {
   screenshots: ScreenshotData[];
   description: string;
   changes: CSSChange[];
@@ -21,26 +21,21 @@ interface DraftState {
 }
 
 const DRAFT_KEY_PREFIX = 'bugshot_draft_';
-const AUTOSAVE_DELAY_MS = 1000; // Debounce autosave by 1 second
+const AUTOSAVE_DELAY_MS = 500; // Reduced for better sync
 
 /**
  * Get draft key for the current tab
  */
-function getDraftKey(tabId: number | null): string {
+export function getDraftKey(tabId: number | null): string {
   return `${DRAFT_KEY_PREFIX}${tabId ?? 'unknown'}`;
 }
 
 /**
- * Hook to persist and restore draft state across tab visibility changes.
+ * Hook to persist and restore draft state across widget/panel and tab visibility changes.
  *
  * Each tab has its own independent draft storage (keyed by tabId).
- * When widget unmounts (tab becomes hidden), draft is saved to chrome.storage.local.
- * When widget mounts (tab becomes visible), draft is restored if it exists.
- *
- * Draft is cleared on:
- * - Tab is closed (handled by background script)
- * - Successful issue submission
- * - Manual "Clear All" action
+ * Both widget and side panel use the same storage key for the same tab.
+ * Changes are synced in real-time via storage.onChanged listener.
  */
 export function useDraftPersistence({
   screenshots,
@@ -55,6 +50,7 @@ export function useDraftPersistence({
   showPreview,
   isRecording,
   onRestore,
+  externalTabId, // Optional: for side panel to pass the current tab ID
 }: {
   screenshots: ScreenshotData[];
   description: string;
@@ -68,14 +64,23 @@ export function useDraftPersistence({
   showPreview: boolean;
   isRecording: boolean;
   onRestore: (state: Omit<DraftState, 'timestamp' | 'url' | 'isRecording'>) => void;
+  externalTabId?: number | null;
 }) {
   const autosaveTimerRef = useRef<number | null>(null);
   const isRestoringRef = useRef(false);
-  const hasRestoredRef = useRef(false); // Track if restoration completed
-  const [tabId, setTabId] = useState<number | null>(null);
+  const hasRestoredRef = useRef(false);
+  const lastSavedTimestampRef = useRef<number>(0); // To avoid restoring our own saves
+  const [tabId, setTabId] = useState<number | null>(externalTabId ?? null);
 
-  // ── Get current tab ID on mount ──
+  // ── Get current tab ID on mount (for widget mode) ──
   useEffect(() => {
+    if (externalTabId !== undefined) {
+      // Side panel mode: use provided tabId
+      setTabId(externalTabId);
+      return;
+    }
+
+    // Widget mode: get tabId from service worker
     chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
       if (response?.tabId) {
         setTabId(response.tabId);
@@ -83,30 +88,28 @@ export function useDraftPersistence({
         console.warn('[DraftPersistence] Failed to get tab ID');
       }
     });
-  }, []);
+  }, [externalTabId]);
 
-  // ── Restore draft on mount (after tabId is loaded) ──
+  // ── Restore draft on mount or tab change ──
   useEffect(() => {
-    if (tabId === null || hasRestoredRef.current) return; // Wait for tabId, restore only once
+    if (tabId === null) return;
 
-    let mounted = true;
+    // Reset restoration state when tabId changes (for side panel tab switching)
+    hasRestoredRef.current = false;
     isRestoringRef.current = true;
 
     const draftKey = getDraftKey(tabId);
     chrome.storage.local.get(draftKey).then((result) => {
-      if (!mounted || hasRestoredRef.current) return;
-
       const draft = result[draftKey] as DraftState | undefined;
       if (draft) {
-        console.log('[DraftPersistence] Restoring draft from storage:', {
+        console.log('[DraftPersistence] Restoring draft:', {
           tabId,
           screenshots: draft.screenshots.length,
           changes: draft.changes.length,
           hasRecording: !!draft.recordingId,
-          wasRecording: draft.isRecording,
-          savedAt: new Date(draft.timestamp).toLocaleTimeString(),
-          url: draft.url,
         });
+
+        lastSavedTimestampRef.current = draft.timestamp;
 
         try {
           onRestore({
@@ -120,18 +123,13 @@ export function useDraftPersistence({
             editNote: draft.editNote,
             activeTab: draft.activeTab,
             showPreview: draft.showPreview,
-            // Note: isRecording state is NOT restored from draft
-            // Always check actual recording status via GET_RECORDING_STATUS message
           });
-          hasRestoredRef.current = true;
         } catch (error) {
           console.error('[DraftPersistence] Restoration failed:', error);
         }
-      } else {
-        hasRestoredRef.current = true; // No draft to restore, mark as done
       }
 
-      // Allow autosave after next render cycle
+      hasRestoredRef.current = true;
       requestAnimationFrame(() => {
         isRestoringRef.current = false;
       });
@@ -140,65 +138,129 @@ export function useDraftPersistence({
       isRestoringRef.current = false;
       hasRestoredRef.current = true;
     });
-
-    return () => {
-      mounted = false;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabId]); // onRestore removed from dependencies to prevent infinite loop
+  }, [tabId]);
+
+  // ── Listen for external storage changes (sync between widget/panel) ──
+  useEffect(() => {
+    if (tabId === null) return;
+
+    const draftKey = getDraftKey(tabId);
+
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName !== 'local') return;
+      if (!changes[draftKey]) return;
+      if (isRestoringRef.current) return;
+
+      const newDraft = changes[draftKey].newValue as DraftState | undefined;
+      if (!newDraft) return;
+
+      // Skip if this is our own save (check timestamp)
+      if (newDraft.timestamp === lastSavedTimestampRef.current) return;
+      // Skip if the change is older than what we last saved
+      if (newDraft.timestamp < lastSavedTimestampRef.current) return;
+
+      console.log('[DraftPersistence] External change detected, syncing...');
+      lastSavedTimestampRef.current = newDraft.timestamp;
+      isRestoringRef.current = true;
+
+      try {
+        onRestore({
+          screenshots: newDraft.screenshots,
+          description: newDraft.description,
+          changes: newDraft.changes,
+          recordingId: newDraft.recordingId,
+          recordingDataUrl: newDraft.recordingDataUrl,
+          recordingSize: newDraft.recordingSize,
+          recordingMimeType: newDraft.recordingMimeType,
+          editNote: newDraft.editNote,
+          activeTab: newDraft.activeTab,
+          showPreview: newDraft.showPreview,
+        });
+      } catch (error) {
+        console.error('[DraftPersistence] Sync failed:', error);
+      }
+
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false;
+      });
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [tabId, onRestore]);
+
+  // ── Save draft function ──
+  const saveDraft = useCallback(() => {
+    if (tabId === null || !hasRestoredRef.current) return;
+
+    const hasContent =
+      screenshots.length > 0 ||
+      description.trim().length > 0 ||
+      changes.length > 0 ||
+      recordingId !== null ||
+      editNote.trim().length > 0;
+
+    const draftKey = getDraftKey(tabId);
+
+    if (!hasContent) {
+      chrome.storage.local.remove(draftKey).catch(() => {});
+      return;
+    }
+
+    const timestamp = Date.now();
+    lastSavedTimestampRef.current = timestamp;
+
+    const draft: DraftState = {
+      screenshots,
+      description,
+      changes,
+      recordingId,
+      recordingDataUrl,
+      recordingSize,
+      recordingMimeType,
+      editNote,
+      activeTab,
+      showPreview,
+      isRecording,
+      timestamp,
+      url: typeof window !== 'undefined' ? window.location.href : '',
+    };
+
+    chrome.storage.local.set({ [draftKey]: draft }).catch((error) => {
+      console.warn('[DraftPersistence] Failed to save draft:', error);
+    });
+  }, [
+    tabId,
+    screenshots,
+    description,
+    changes,
+    recordingId,
+    recordingDataUrl,
+    recordingSize,
+    recordingMimeType,
+    editNote,
+    activeTab,
+    showPreview,
+    isRecording,
+  ]);
 
   // ── Auto-save draft when state changes (debounced) ──
   useEffect(() => {
-    if (tabId === null) return; // Wait for tabId
-    // Skip autosave until restoration is complete
-    if (isRestoringRef.current || !hasRestoredRef.current) return;
+    if (tabId === null || isRestoringRef.current || !hasRestoredRef.current) return;
 
-    // Clear any pending autosave
     if (autosaveTimerRef.current !== null) {
       window.clearTimeout(autosaveTimerRef.current);
     }
 
-    // Schedule new autosave
     autosaveTimerRef.current = window.setTimeout(() => {
       autosaveTimerRef.current = null;
-
-      // Check if there's any content worth saving
-      const hasContent =
-        screenshots.length > 0 ||
-        description.trim().length > 0 ||
-        changes.length > 0 ||
-        recordingId !== null ||
-        editNote.trim().length > 0;
-
-      const draftKey = getDraftKey(tabId);
-
-      if (!hasContent) {
-        // No content - clear any existing draft
-        chrome.storage.local.remove(draftKey).catch(() => {
-          // Ignore errors
-        });
-        return;
-      }
-
-      const draft: DraftState = {
-        screenshots,
-        description,
-        changes,
-        recordingId,
-        recordingDataUrl,
-        recordingSize,
-        recordingMimeType,
-        editNote,
-        activeTab,
-        showPreview,
-        isRecording,
-        timestamp: Date.now(),
-        url: window.location.href,
-      };
-
-      chrome.storage.local.set({ [draftKey]: draft }).catch((error) => {
-        console.warn('[DraftPersistence] Failed to save draft:', error);
-      });
+      saveDraft();
     }, AUTOSAVE_DELAY_MS);
 
     return () => {
@@ -206,104 +268,40 @@ export function useDraftPersistence({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [
-    tabId,
-    screenshots,
-    description,
-    changes,
-    recordingId,
-    recordingDataUrl,
-    recordingSize,
-    recordingMimeType,
-    editNote,
-    activeTab,
-    showPreview,
-    isRecording,
-  ]);
+  }, [saveDraft, tabId]);
 
   // ── Save draft immediately on unmount ──
   useEffect(() => {
     return () => {
-      if (tabId === null || !hasRestoredRef.current) return; // Can't save without tabId or before restoration
-
-      // Cancel any pending autosave
       if (autosaveTimerRef.current !== null) {
         window.clearTimeout(autosaveTimerRef.current);
         autosaveTimerRef.current = null;
       }
-
-      // Save immediately on unmount (tab becoming hidden)
-      const hasContent =
-        screenshots.length > 0 ||
-        description.trim().length > 0 ||
-        changes.length > 0 ||
-        recordingId !== null ||
-        editNote.trim().length > 0;
-
-      const draftKey = getDraftKey(tabId);
-
-      if (hasContent) {
-        const draft: DraftState = {
-          screenshots,
-          description,
-          changes,
-          recordingId,
-          recordingDataUrl,
-          recordingSize,
-          recordingMimeType,
-          editNote,
-          activeTab,
-          showPreview,
-          isRecording,
-          timestamp: Date.now(),
-          url: window.location.href,
-        };
-
-        // Use synchronous storage API during unmount to ensure it completes
-        try {
-          chrome.storage.local.set({ [draftKey]: draft });
-        } catch (error) {
-          console.warn('[DraftPersistence] Failed to save draft on unmount:', error);
-        }
-      } else {
-        // No content - clear draft
-        try {
-          chrome.storage.local.remove(draftKey);
-        } catch {
-          // Ignore errors
-        }
-      }
+      // Save synchronously on unmount
+      saveDraft();
     };
-  }, [
-    tabId,
-    screenshots,
-    description,
-    changes,
-    recordingId,
-    recordingDataUrl,
-    recordingSize,
-    recordingMimeType,
-    editNote,
-    activeTab,
-    showPreview,
-    isRecording,
-  ]);
+  }, [saveDraft]);
+
+  return { tabId };
 }
 
 /**
  * Helper function to clear saved draft from storage for the current tab.
  * Call this after successful submission or manual "Clear All".
  */
-export async function clearDraft(): Promise<void> {
+export async function clearDraft(tabId?: number): Promise<void> {
   try {
-    // Get current tab ID
-    const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_ID' });
-    if (!response?.tabId) {
-      console.warn('[DraftPersistence] Cannot clear draft: failed to get tab ID');
-      return;
+    let targetTabId = tabId;
+    if (targetTabId === undefined) {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_ID' });
+      if (!response?.tabId) {
+        console.warn('[DraftPersistence] Cannot clear draft: failed to get tab ID');
+        return;
+      }
+      targetTabId = response.tabId;
     }
 
-    const draftKey = getDraftKey(response.tabId);
+    const draftKey = getDraftKey(targetTabId!);
     await chrome.storage.local.remove(draftKey);
   } catch (error) {
     console.warn('[DraftPersistence] Failed to clear draft:', error);

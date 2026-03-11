@@ -1,7 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 import type { ExtensionMessage } from '@/shared/types/messages';
-
-const CROP_PADDING = 12;
+import { cropScreenshotToRect, cropScreenshotToRegion } from '@/shared/utils/screenshot';
 
 /**
  * Temporarily disable pointer-events on an element and its ancestors
@@ -94,7 +93,6 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
   /** Capture only the bounding rect of a specific element (cropped from full page). */
   const captureElement = useCallback((el: Element): Promise<string> => {
     const rect = el.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
 
     // Disable hover state before capturing to get "resting" appearance
     const restoreHover = disableHoverState(el);
@@ -103,24 +101,12 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
       .then((dataUrl) => {
         // Restore hover state after capture
         restoreHover();
-        return new Promise<string>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            // Source coordinates (in the captured image, which is at dpr scale)
-            const sx = Math.max(0, Math.round((rect.left - CROP_PADDING) * dpr));
-            const sy = Math.max(0, Math.round((rect.top - CROP_PADDING) * dpr));
-            const sw = Math.min(img.width - sx, Math.round((rect.width + CROP_PADDING * 2) * dpr));
-            const sh = Math.min(img.height - sy, Math.round((rect.height + CROP_PADDING * 2) * dpr));
-
-            const canvas = document.createElement('canvas');
-            canvas.width = sw;
-            canvas.height = sh;
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-            resolve(canvas.toDataURL('image/png'));
-          };
-          img.onerror = () => resolve(dataUrl); // fallback to full page
-          img.src = dataUrl;
+        // Use shared cropping utility
+        return cropScreenshotToRect(dataUrl, {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
         });
       })
       .catch((err) => {
@@ -132,28 +118,9 @@ export function useScreenshot(portRef: MutableRefObject<chrome.runtime.Port | nu
 
   /** Capture a specific region of the page. */
   const captureRegion = useCallback((region: { x: number; y: number; width: number; height: number }): Promise<string> => {
-    const dpr = window.devicePixelRatio || 1;
-
     return captureRaw().then((dataUrl) => {
-      return new Promise<string>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          // Source coordinates (in the captured image, which is at dpr scale)
-          const sx = Math.max(0, Math.round(region.x * dpr));
-          const sy = Math.max(0, Math.round(region.y * dpr));
-          const sw = Math.min(img.width - sx, Math.round(region.width * dpr));
-          const sh = Math.min(img.height - sy, Math.round(region.height * dpr));
-
-          const canvas = document.createElement('canvas');
-          canvas.width = sw;
-          canvas.height = sh;
-          const ctx = canvas.getContext('2d')!;
-          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-          resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => resolve(dataUrl); // fallback to full page
-        img.src = dataUrl;
-      });
+      // Use shared cropping utility (no padding for explicit region selection)
+      return cropScreenshotToRegion(dataUrl, region);
     });
   }, [captureRaw]);
 
