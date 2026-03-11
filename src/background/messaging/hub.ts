@@ -45,8 +45,8 @@ interface CDPSession {
 const cdpSessions = new Map<number, CDPSession>();
 const CDP_SESSION_TIMEOUT = 30000; // 30 seconds
 
-// CDP request locking to prevent concurrent attach attempts
-const cdpLocks = new Map<number, Promise<void>>();
+// CDP request queue - ensures sequential execution per tab (fixes race condition)
+const cdpRequestQueues = new Map<number, Promise<CDPStyleResult | null>>();
 // Track failed tabs to avoid retry spam
 const cdpFailedTabs = new Map<number, number>(); // tabId -> timestamp
 const CDP_FAILURE_COOLDOWN = 60000; // 60 seconds before retry (longer when DevTools is open)
@@ -65,9 +65,9 @@ export function isSidePanelOpen(): boolean {
  * Clean up CDP session for a specific tab (called on tab close)
  */
 export function cleanupCDPSession(tabId: number) {
-  // Clean up failure tracking
+  // Clean up failure tracking and request queue
   cdpFailedTabs.delete(tabId);
-  cdpLocks.delete(tabId);
+  cdpRequestQueues.delete(tabId);
 
   const session = cdpSessions.get(tabId);
   if (session) {
@@ -957,29 +957,28 @@ function escapeCSSSelector(selector: string): string {
 }
 
 async function getElementStylesViaCDP(tabId: number, selector: string): Promise<CDPStyleResult> {
-  const target = { tabId };
-  const escapedSelector = escapeCSSSelector(selector);
-
   // Check if this tab failed recently - avoid spamming retries
   const failedAt = cdpFailedTabs.get(tabId);
   if (failedAt && Date.now() - failedAt < CDP_FAILURE_COOLDOWN) {
     throw new Error('CDP unavailable for this tab (cooldown)');
   }
 
-  // Wait for any existing CDP operation on this tab to complete
-  const existingLock = cdpLocks.get(tabId);
-  if (existingLock) {
-    try {
-      await existingLock;
-    } catch {
-      // Previous operation failed, continue with ours
-    }
-  }
+  // Queue requests per tab to ensure sequential execution (fixes race condition)
+  const previousRequest = cdpRequestQueues.get(tabId) || Promise.resolve(null);
 
-  // Create a new lock for this operation
-  let resolveLock: () => void;
-  const lockPromise = new Promise<void>((resolve) => { resolveLock = resolve; });
-  cdpLocks.set(tabId, lockPromise);
+  const currentRequest = previousRequest
+    .catch(() => null) // Ignore previous failures
+    .then(() => executeGetElementStyles(tabId, selector));
+
+  cdpRequestQueues.set(tabId, currentRequest);
+
+  return currentRequest;
+}
+
+// Actual CDP execution (called sequentially per tab)
+async function executeGetElementStyles(tabId: number, selector: string): Promise<CDPStyleResult> {
+  const target = { tabId };
+  const escapedSelector = escapeCSSSelector(selector);
 
   try {
     // Check if we have an active session for this tab
@@ -1131,9 +1130,5 @@ async function getElementStylesViaCDP(tabId: number, selector: string): Promise<
       cdpFailedTabs.set(tabId, Date.now());
     }
     throw error;
-  } finally {
-    // Release the lock
-    resolveLock!();
-    cdpLocks.delete(tabId);
   }
 }
